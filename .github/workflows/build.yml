@@ -60,8 +60,63 @@ jobs:
           name: betterft8-windows-x64
           path: release/
 
-  # Linux x64 — without Hamlib (use rigctld)
+  # Windows x64 — rigctld only (no Hamlib DLLs needed)
+  windows-rigctld:
+    needs: client
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist/
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+      - name: Build
+        working-directory: server
+        run: cargo build --release --no-default-features
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p release
+          cp server/target/release/betterft8-server.exe release/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: betterft8-windows-x64-rigctld
+          path: release/
+
+  # Linux x64 — with Hamlib (requires libhamlib4 at runtime)
   linux:
+    needs: client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist/
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libhamlib-dev
+      - name: Build
+        working-directory: server
+        run: cargo build --release
+      - name: Package
+        run: |
+          mkdir -p release
+          cp server/target/release/betterft8-server release/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: betterft8-linux-x64
+          path: release/
+
+  # Linux x64 — rigctld only (no Hamlib dependency)
+  linux-rigctld:
     needs: client
     runs-on: ubuntu-latest
     steps:
@@ -85,11 +140,39 @@ jobs:
           cp server/target/release/betterft8-server release/
       - uses: actions/upload-artifact@v4
         with:
-          name: betterft8-linux-x64
+          name: betterft8-linux-x64-rigctld
           path: release/
 
-  # Raspberry Pi — aarch64, without Hamlib, uses cross for Docker-based build
+  # Raspberry Pi aarch64 — with Hamlib (requires libhamlib4 at runtime)
   raspberry-pi:
+    needs: client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist/
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+      - name: Build
+        working-directory: server
+        run: cross build --release --target aarch64-unknown-linux-gnu
+      - name: Package
+        run: |
+          mkdir -p release
+          cp server/target/aarch64-unknown-linux-gnu/release/betterft8-server release/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: betterft8-raspberry-pi-aarch64
+          path: release/
+
+  # Raspberry Pi aarch64 — rigctld only (no Hamlib dependency)
+  raspberry-pi-rigctld:
     needs: client
     runs-on: ubuntu-latest
     steps:
@@ -113,5 +196,5 @@ jobs:
           cp server/target/aarch64-unknown-linux-gnu/release/betterft8-server release/
       - uses: actions/upload-artifact@v4
         with:
-          name: betterft8-raspberry-pi-aarch64
+          name: betterft8-raspberry-pi-aarch64-rigctld
           path: release/
