@@ -22,6 +22,8 @@ num-complex = "0.4"
 base64 = { version = "0.22", features = ["std"] }
 ringbuf = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
+rust-embed = "8"
+mime_guess = "2"
 
 [features]
 default = ["hamlib"]

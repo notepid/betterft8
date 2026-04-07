@@ -28,8 +28,11 @@ npm run preview # preview production build
 
 ### Running Together
 1. `cd client && npm run build` — produces static files in `client/dist/`
-2. Set `static_files = "client/dist"` in `betterft8.toml`
+2. `cd server && cargo build` — embeds `client/dist/` into the binary via rust-embed
 3. `cd server && cargo run -- ../betterft8.toml` — serves everything on port 8073
+
+The client is embedded in the binary at compile time. To serve from disk instead
+(for development), set `static_files = "../client/dist"` in `betterft8.toml`.
 
 For UI-only development without a radio, use Hamlib's dummy rig:
 ```bash
@@ -74,7 +77,7 @@ rigctld daemon ← → hamlib.rs TCP client (polls every 2s)
 [network]
 host = "0.0.0.0"
 port = 8073
-static_files = "client/dist"
+# static_files = "client/dist"  # optional: override embedded assets
 operator_password = "secret"   # required to TX/control radio
 viewer_password = ""           # optional; leave empty for open viewing
 

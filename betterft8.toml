@@ -1,7 +1,7 @@
 [network]
 host = "0.0.0.0"
 port = 8073
-static_files = "../client/dist"
+# static_files = "../client/dist"  # optional: serve from disk instead of embedded assets
 operator_password = "changeme"
 
 [station]

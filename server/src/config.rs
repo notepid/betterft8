@@ -15,7 +15,9 @@ pub struct Config {
 pub struct NetworkConfig {
     pub host: String,
     pub port: u16,
-    pub static_files: String,
+    /// Optional path to serve client files from disk (overrides embedded assets).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub static_files: Option<String>,
     pub operator_password: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewer_password: Option<String>,
@@ -102,7 +104,7 @@ impl Default for Config {
             network: NetworkConfig {
                 host: "0.0.0.0".to_string(),
                 port: 8073,
-                static_files: "../client/dist".to_string(),
+                static_files: None,
                 operator_password: "changeme".to_string(),
                 viewer_password: None,
                 tls_cert: None,
