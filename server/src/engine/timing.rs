@@ -45,15 +45,19 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
             tokio::time::sleep(Duration::from_millis(sleep_pre)).await;
 
             // Safety: if we are already more than 1 s into the period, skip TX
+            // and fall through to decode so the period is not lost.
             let now_ms2 = Utc::now().timestamp_millis();
             if now_ms2 > active_start * 1000 + 1000 {
-                tracing::warn!("TX: missed window ({}ms late), skipping", now_ms2 - active_start * 1000);
+                tracing::warn!(
+                    "TX: missed window ({}ms into period), will retry next period",
+                    now_ms2 - active_start * 1000,
+                );
+                // Fall through to the decode path below.
             } else {
                 do_tx(&state, active_start).await;
+                // TX ran — skip decode for this TX period.
+                continue;
             }
-
-            // After TX, skip the decode for this TX period and loop.
-            continue;
         }
 
         // ---- Sleep until decode time ----------------------------------------
