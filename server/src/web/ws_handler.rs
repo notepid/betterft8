@@ -11,6 +11,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{broadcast, mpsc};
 
 use crate::engine::qso::{self, QsoState};
+use crate::radio::RadioCommand;
 use crate::state::{LogEntryData, QsoUpdate, SharedState, TxRequest};
 use crate::web::session::ClientId;
 use super::messages::{ClientMessage, DecodedMessageJson, ServerMessage};
@@ -335,21 +336,11 @@ async fn handle_client_message(
                 }
 
                 ClientMessage::SetFrequency { freq } => {
-                    let mut guard = state.rig.lock().await;
-                    if let Some(rig) = guard.as_mut() {
-                        if let Err(e) = rig.set_frequency(freq).await {
-                            tracing::warn!("set_frequency error: {e}");
-                        }
-                    }
+                    let _ = state.radio_cmd_tx.send(RadioCommand::SetFrequency(freq)).await;
                 }
 
                 ClientMessage::SetMode { mode, passband } => {
-                    let mut guard = state.rig.lock().await;
-                    if let Some(rig) = guard.as_mut() {
-                        if let Err(e) = rig.set_mode(&mode, passband).await {
-                            tracing::warn!("set_mode error: {e}");
-                        }
-                    }
+                    let _ = state.radio_cmd_tx.send(RadioCommand::SetMode(mode, passband)).await;
                 }
 
                 ClientMessage::EnableTx { enabled } => {
@@ -443,12 +434,7 @@ async fn handle_client_message(
                     if let Some(pb) = state.playback.as_ref() {
                         pb.cancel();
                     }
-                    let mut guard = state.rig.lock().await;
-                    if let Some(rig) = guard.as_mut() {
-                        if let Err(e) = rig.set_ptt(false).await {
-                            tracing::warn!("PTT deassert on HaltTx failed: {e}");
-                        }
-                    }
+                    let _ = state.radio_cmd_tx.send(RadioCommand::SetPtt(false)).await;
                     tracing::info!("TX halted");
                     broadcast_qso_update(state).await;
                 }

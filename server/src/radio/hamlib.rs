@@ -18,6 +18,15 @@ impl RigCtld {
     }
 
     async fn send_command(&mut self, cmd: &str) -> Result<Vec<String>> {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            self.send_command_inner(cmd),
+        )
+        .await
+        .map_err(|_| anyhow!("rigctld command timed out: {}", cmd))?
+    }
+
+    async fn send_command_inner(&mut self, cmd: &str) -> Result<Vec<String>> {
         let line = format!("{}\n", cmd);
         self.writer.write_all(line.as_bytes()).await?;
         self.writer.flush().await?;

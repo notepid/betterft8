@@ -18,6 +18,7 @@ mod web;
 use state::{AppState, LogEntryData, QsoUpdate};
 use web::server::build_router;
 use web::session::SessionManager;
+use radio::RadioCommand;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -31,11 +32,12 @@ async fn main() -> Result<()> {
     let addr = format!("{}:{}", config.network.host, config.network.port);
     tracing::info!("BetterFT8 server starting on {addr}");
 
-    let (waterfall_tx, _) = broadcast::channel(32);
-    let (decode_tx, _)    = broadcast::channel(16);
-    let (radio_tx, _)     = broadcast::channel(8);
-    let (qso_tx, _)       = broadcast::channel::<QsoUpdate>(16);
-    let (log_tx, _)       = broadcast::channel::<LogEntryData>(8);
+    let (waterfall_tx, _)  = broadcast::channel(32);
+    let (decode_tx, _)     = broadcast::channel(16);
+    let (radio_tx, _)      = broadcast::channel(8);
+    let (qso_tx, _)        = broadcast::channel::<QsoUpdate>(16);
+    let (log_tx, _)        = broadcast::channel::<LogEntryData>(8);
+    let (radio_cmd_tx, radio_cmd_rx) = tokio::sync::mpsc::channel::<RadioCommand>(16);
 
     // Shared rolling audio buffer for the FT8 decode engine.
     let decode_buf = Arc::new(Mutex::new(Vec::<f32>::new()));
@@ -85,7 +87,7 @@ async fn main() -> Result<()> {
         log_tx:       log_tx.clone(),
         recent_decodes:    tokio::sync::Mutex::new(VecDeque::new()),
         last_radio_status: tokio::sync::Mutex::new(state::RadioStatus::default()),
-        rig:          tokio::sync::Mutex::new(None),
+        radio_cmd_tx,
         tx_queue:     tokio::sync::Mutex::new(None),
         tx_enabled:   AtomicBool::new(false),
         desired_tx_parity: AtomicBool::new(false),
@@ -104,7 +106,7 @@ async fn main() -> Result<()> {
     tokio::spawn(engine::timing::run(state.clone(), decode_buf, effective_rate));
 
     // Spawn radio polling task
-    tokio::spawn(radio::run(state.clone()));
+    tokio::spawn(radio::run(state.clone(), radio_cmd_rx));
 
     let router = build_router(state);
 

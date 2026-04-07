@@ -6,6 +6,7 @@ use chrono::Utc;
 
 use crate::engine::{logger, qso};
 use crate::engine::qso::QsoState;
+use crate::radio::RadioCommand;
 use crate::state::{DecodeResult, LogEntryData, QsoUpdate, SharedState, TxRequest};
 use crate::dsp::ft8::DecodedMessage;
 
@@ -255,16 +256,7 @@ async fn do_tx(state: &SharedState, period_start: i64) {
     tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
 
     // --- Assert PTT ----------------------------------------------------------
-    {
-        let mut guard = state.rig.lock().await;
-        if let Some(rig) = guard.as_mut() {
-            if let Err(e) = rig.set_ptt(true).await {
-                tracing::warn!("PTT on failed: {e}");
-            } else {
-                tracing::info!("PTT ON");
-            }
-        }
-    }
+    let _ = state.radio_cmd_tx.send(RadioCommand::SetPtt(true)).await;
 
     // --- Start audio ---------------------------------------------------------
     if let Some(pb) = state.playback.as_ref() {
@@ -286,16 +278,7 @@ async fn do_tx(state: &SharedState, period_start: i64) {
     tokio::time::sleep(Duration::from_millis(110)).await;
 
     // --- Deassert PTT --------------------------------------------------------
-    {
-        let mut guard = state.rig.lock().await;
-        if let Some(rig) = guard.as_mut() {
-            if let Err(e) = rig.set_ptt(false).await {
-                tracing::warn!("PTT off failed: {e}");
-            } else {
-                tracing::info!("PTT OFF");
-            }
-        }
-    }
+    let _ = state.radio_cmd_tx.send(RadioCommand::SetPtt(false)).await;
 
     tracing::info!("TX complete");
 }

@@ -3,13 +3,13 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use chrono::{DateTime, Utc};
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{broadcast, mpsc, Mutex};
 
 use crate::audio::playback::PlaybackHandle;
 use crate::config::Config;
 use crate::dsp::ft8::DecodedMessage;
 use crate::engine::qso::QsoState;
-use crate::radio::hamlib::RigCtld;
+use crate::radio::RadioCommand;
 use crate::web::session::SessionManager;
 
 // ---- Broadcast payloads -----------------------------------------------------
@@ -89,7 +89,8 @@ pub struct AppState {
     pub last_radio_status: Mutex<RadioStatus>,
 
     // ---- Radio control ------------------------------------------------------
-    pub rig: Mutex<Option<RigCtld>>,
+    /// Send PTT/frequency/mode commands to the radio task (which owns the connection).
+    pub radio_cmd_tx: mpsc::Sender<RadioCommand>,
 
     // ---- TX / QSO -----------------------------------------------------------
     /// Pre-encoded audio waiting to fire on the next TX period.
