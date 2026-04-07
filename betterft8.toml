@@ -9,7 +9,8 @@ callsign = "N0CALL"
 grid = "AA00"
 
 [audio]
-# input_device = "My Microphone"  # omit for system default
+# input_device = "My Microphone"   # omit for system default
+# output_device = "My Speakers"    # omit for system default
 sample_rate = 12000
 
 [radio]

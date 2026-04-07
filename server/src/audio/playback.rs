@@ -52,15 +52,23 @@ impl PlaybackHandle {
 // Safety: PlaybackHandle only contains Arc<Mutex<...>> + u32, both Send+Sync.
 // The cpal Stream is NOT inside this struct, so no raw-pointer concerns here.
 
-/// Open the default audio output device and return a (handle, stream) pair.
+/// Open an audio output device and return a (handle, stream) pair.
+///
+/// If `device_name` is `Some`, the named device is used; otherwise the system
+/// default output device is selected.
 ///
 /// The returned `cpal::Stream` must be kept alive (e.g. stored in `main`).
 /// The `PlaybackHandle` is `Send + Sync` and can be placed in `AppState`.
-pub fn start_playback() -> Result<(PlaybackHandle, cpal::Stream)> {
+pub fn start_playback(device_name: Option<&str>) -> Result<(PlaybackHandle, cpal::Stream)> {
     let host   = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .ok_or_else(|| anyhow!("no default audio output device found"))?;
+    let device = if let Some(name) = device_name {
+        host.output_devices()?
+            .find(|d| d.name().map(|n| n == name).unwrap_or(false))
+            .ok_or_else(|| anyhow!("audio output device '{}' not found", name))?
+    } else {
+        host.default_output_device()
+            .ok_or_else(|| anyhow!("no default audio output device found"))?
+    };
 
     tracing::info!(
         "Audio output device: {}",

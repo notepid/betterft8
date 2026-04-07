@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
 
     // Audio output — _out_stream must stay alive; PlaybackHandle goes into AppState.
     let (playback, tx_sample_rate, _out_stream) =
-        match audio::playback::start_playback() {
+        match audio::playback::start_playback(config.audio.output_device.as_deref()) {
             Ok((handle, stream)) => {
                 tracing::info!("Audio output ready at {}Hz", handle.sample_rate);
                 let rate = handle.sample_rate;
