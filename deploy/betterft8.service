@@ -1,0 +1,15 @@
+[Unit]
+Description=BetterFT8 Server
+After=network.target sound.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/betterft8
+ExecStart=/home/pi/betterft8/betterft8-server
+Restart=on-failure
+RestartSec=5
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target

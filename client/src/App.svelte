@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { client } from './lib/websocket'
-  import { connected } from './lib/stores'
+  import { connected, settingsOpen } from './lib/stores'
   import Waterfall from './components/Waterfall.svelte'
   import DecodeList from './components/DecodeList.svelte'
   import RadioStatus from './components/RadioStatus.svelte'
   import Controls from './components/Controls.svelte'
   import QsoPanel from './components/QsoPanel.svelte'
   import Login from './components/Login.svelte'
+  import Settings from './components/Settings.svelte'
 
   // TX frequency shared between Controls and QsoPanel
   let txFreq = 1000
@@ -27,12 +28,14 @@
     <span class="status" class:online={$connected} title={$connected ? 'Connected' : 'Disconnected'}>
       {$connected ? 'Connected' : 'Disconnected'}
     </span>
-    <!--
-      Login renders two things:
-      1. A fixed auth overlay when viewer password is required ($needsAuth)
-      2. An inline session bar (role badge + operator controls) here in the header
-    -->
     <Login />
+    <button
+      class="settings-btn"
+      title="Settings"
+      on:click={() => settingsOpen.update((v) => !v)}
+    >
+      ⚙
+    </button>
   </header>
 
   <section class="radio-section">
@@ -56,6 +59,9 @@
     <DecodeList />
   </section>
 </main>
+
+<!-- Settings slide-out panel (portal-style fixed overlay) -->
+<Settings />
 
 <style>
   :global(body) {
@@ -95,6 +101,22 @@
 
   .status.online {
     background: #27ae60;
+  }
+
+  .settings-btn {
+    margin-left: auto;
+    background: none;
+    border: 1px solid #2a2a4a;
+    color: #8888aa;
+    font-size: 1.1rem;
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 0.2rem 0.5rem;
+    line-height: 1;
+  }
+  .settings-btn:hover {
+    color: #e0e0e0;
+    border-color: #4a4a8a;
   }
 
   .radio-section {

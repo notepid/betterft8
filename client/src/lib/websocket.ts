@@ -1,5 +1,27 @@
 import type { ClientMessage, ServerMessage } from './messages'
-import { connected, lastMessage, waterfallLine, addDecodes, radioStatus, qsoUpdate, myRole, operatorStatus, needsAuth, authError } from './stores'
+import {
+  addDecodes,
+  alertEnabled,
+  authError,
+  configUpdateResult,
+  connected,
+  deviceList,
+  lastMessage,
+  logEntries,
+  logFile,
+  myCall,
+  myGrid,
+  myRole,
+  needsAuth,
+  operatorStatus,
+  qsoUpdate,
+  radioStatus,
+  rigctldTestResult,
+  rigHost,
+  rigPort,
+  waterfallLine,
+} from './stores'
+import { get } from 'svelte/store'
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`
 
@@ -39,6 +61,11 @@ class BetterFT8Client {
           } else {
             myRole.set('viewer')
           }
+          myCall.set(msg.callsign)
+          myGrid.set(msg.grid)
+          logFile.set(msg.log_file)
+          rigHost.set(msg.rig_host)
+          rigPort.set(msg.rig_port)
         } else if (msg.type === 'auth_result') {
           if (msg.success) {
             needsAuth.set(false)
@@ -58,12 +85,35 @@ class BetterFT8Client {
           waterfallLine.set(msg)
         } else if (msg.type === 'decode') {
           addDecodes(msg.period, msg.messages)
+          // Check for callsign alert
+          const call = get(myCall)
+          const alert = get(alertEnabled)
+          if (call && alert) {
+            const upper = call.toUpperCase()
+            if (msg.messages.some((m) => m.message.toUpperCase().includes(upper))) {
+              playAlert()
+            }
+          }
         } else if (msg.type === 'radio_status') {
           radioStatus.set(msg)
         } else if (msg.type === 'qso_update') {
           qsoUpdate.set(msg)
+        } else if (msg.type === 'log_entry') {
+          logEntries.update((prev) => {
+            const next = [msg, ...prev]
+            return next.length > 100 ? next.slice(0, 100) : next
+          })
+        } else if (msg.type === 'device_list') {
+          deviceList.set({ inputs: msg.inputs, outputs: msg.outputs })
+        } else if (msg.type === 'config_update_result') {
+          configUpdateResult.set(msg)
+          if (msg.success && !msg.message) {
+            // immediate callsign/grid update: refresh Hello values via next connection
+            // or we can just trust the stores updated in Settings
+          }
+        } else if (msg.type === 'rigctld_test_result') {
+          rigctldTestResult.set(msg)
         } else if (msg.type === 'error') {
-          // Surface server errors for auth UI
           authError.set(msg.message)
           lastMessage.set(msg)
         } else {
@@ -105,6 +155,23 @@ class BetterFT8Client {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg))
     }
+  }
+}
+
+function playAlert() {
+  try {
+    const ctx = new AudioContext()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.frequency.value = 800
+    gain.gain.setValueAtTime(0.3, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.3)
+  } catch {
+    // AudioContext may be blocked; ignore
   }
 }
 

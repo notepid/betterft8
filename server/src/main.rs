@@ -15,7 +15,7 @@ mod radio;
 mod state;
 mod web;
 
-use state::{AppState, QsoUpdate};
+use state::{AppState, LogEntryData, QsoUpdate};
 use web::server::build_router;
 use web::session::SessionManager;
 
@@ -35,6 +35,7 @@ async fn main() -> Result<()> {
     let (decode_tx, _)    = broadcast::channel(16);
     let (radio_tx, _)     = broadcast::channel(8);
     let (qso_tx, _)       = broadcast::channel::<QsoUpdate>(16);
+    let (log_tx, _)       = broadcast::channel::<LogEntryData>(8);
 
     // Shared rolling audio buffer for the FT8 decode engine.
     let decode_buf = Arc::new(Mutex::new(Vec::<f32>::new()));
@@ -62,13 +63,26 @@ async fn main() -> Result<()> {
         config.network.viewer_password.clone(),
     );
 
+    // Enumerate audio devices for the Settings panel.
+    let (audio_input_devices, audio_output_devices) = list_audio_devices();
+    tracing::info!(
+        "Audio devices: {} inputs, {} outputs",
+        audio_input_devices.len(),
+        audio_output_devices.len()
+    );
+
+    // TLS config (read before moving config into AppState).
+    let tls_cert = config.network.tls_cert.clone();
+    let tls_key  = config.network.tls_key.clone();
+
     let state = Arc::new(AppState {
-        config,
+        config: std::sync::RwLock::new(config),
         sessions,
         waterfall_tx: waterfall_tx.clone(),
         decode_tx:    decode_tx.clone(),
         radio_tx:     radio_tx.clone(),
         qso_tx:       qso_tx.clone(),
+        log_tx:       log_tx.clone(),
         recent_decodes:    tokio::sync::Mutex::new(VecDeque::new()),
         last_radio_status: tokio::sync::Mutex::new(state::RadioStatus::default()),
         rig:          tokio::sync::Mutex::new(None),
@@ -76,8 +90,11 @@ async fn main() -> Result<()> {
         tx_enabled:   AtomicBool::new(false),
         desired_tx_parity: AtomicBool::new(false),
         qso:          tokio::sync::Mutex::new(engine::qso::QsoState::Idle),
+        qso_start:    Mutex::new(None),
         playback,
         tx_sample_rate,
+        audio_input_devices,
+        audio_output_devices,
     });
 
     // Spawn DSP waterfall task
@@ -91,15 +108,50 @@ async fn main() -> Result<()> {
 
     let router = build_router(state);
 
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-
     // Keep audio streams alive until the server exits.
     let _keep_alive = (_in_stream, _out_stream);
 
-    axum::serve(
-        listener,
-        router.into_make_service_with_connect_info::<SocketAddr>(),
-    ).await?;
+    // Start HTTP or HTTPS server.
+    if let (Some(cert), Some(key)) = (tls_cert, tls_key) {
+        tracing::info!("TLS enabled — serving HTTPS/WSS on {addr}");
+        let tls_config = axum_server::tls_rustls::RustlsConfig::from_pem_file(cert, key).await?;
+        axum_server::bind_rustls(addr.parse()?, tls_config)
+            .serve(router.into_make_service_with_connect_info::<SocketAddr>())
+            .await?;
+    } else {
+        let listener = tokio::net::TcpListener::bind(&addr).await?;
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<SocketAddr>(),
+        ).await?;
+    }
 
     Ok(())
+}
+
+/// Enumerate cpal audio input and output device names.
+fn list_audio_devices() -> (Vec<String>, Vec<String>) {
+    use cpal::traits::HostTrait;
+    let host = cpal::default_host();
+    let inputs = host
+        .input_devices()
+        .map(|iter| {
+            iter.map(|d| {
+                use cpal::traits::DeviceTrait;
+                d.name().unwrap_or_else(|_| "unknown".to_string())
+            })
+            .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let outputs = host
+        .output_devices()
+        .map(|iter| {
+            iter.map(|d| {
+                use cpal::traits::DeviceTrait;
+                d.name().unwrap_or_else(|_| "unknown".to_string())
+            })
+            .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    (inputs, outputs)
 }

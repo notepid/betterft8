@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
+use chrono::{DateTime, Utc};
 use tokio::sync::{broadcast, Mutex};
 
 use crate::audio::playback::PlaybackHandle;
@@ -52,10 +53,24 @@ pub struct QsoUpdate {
     pub tx_queued:  bool,
 }
 
+/// ADIF log entry broadcast to all authenticated clients.
+#[derive(Clone)]
+pub struct LogEntryData {
+    pub their_call: String,
+    pub their_grid: Option<String>,
+    pub rst_sent:   String,
+    pub rst_rcvd:   String,
+    pub freq_hz:    u64,
+    pub band:       String,
+    pub date:       String,
+    pub time_on:    String,
+}
+
 // ---- Shared application state -----------------------------------------------
 
 pub struct AppState {
-    pub config: Config,
+    /// In-memory configuration behind a RwLock so Settings panel can mutate it.
+    pub config: std::sync::RwLock<Config>,
 
     // ---- Session management -------------------------------------------------
     pub sessions: SessionManager,
@@ -65,6 +80,7 @@ pub struct AppState {
     pub decode_tx:    broadcast::Sender<DecodeResult>,
     pub radio_tx:     broadcast::Sender<RadioStatus>,
     pub qso_tx:       broadcast::Sender<QsoUpdate>,
+    pub log_tx:       broadcast::Sender<LogEntryData>,
 
     // ---- Cached state for initial sync to new clients -----------------------
     /// Last 5 decode periods; newest at front.
@@ -84,10 +100,16 @@ pub struct AppState {
     pub desired_tx_parity: AtomicBool,
     /// Current QSO state machine.
     pub qso: Mutex<QsoState>,
+    /// Timestamp when the current QSO started (used for ADIF TIME_ON).
+    pub qso_start: std::sync::Mutex<Option<DateTime<Utc>>>,
     /// Audio output handle (None if no output device is available).
     pub playback: Option<PlaybackHandle>,
     /// Sample rate of the audio output (or 12000 if no playback device).
     pub tx_sample_rate: u32,
+
+    // ---- Audio device enumeration -------------------------------------------
+    pub audio_input_devices:  Vec<String>,
+    pub audio_output_devices: Vec<String>,
 }
 
 pub type SharedState = Arc<AppState>;

@@ -1,11 +1,9 @@
 <script lang="ts">
-  import { decodes, selectedDecode, type Decode } from '../lib/stores'
-
-  export let myCallsign: string = ''
+  import { decodes, myCall, selectedDecode, type Decode } from '../lib/stores'
 
   function rowClass(d: Decode): string {
     const upper = d.message.toUpperCase()
-    if (myCallsign && upper.includes(myCallsign.toUpperCase())) return 'row-mycall'
+    if ($myCall && upper.includes($myCall.toUpperCase())) return 'row-mycall'
     if (upper.startsWith('CQ ') || upper === 'CQ') return 'row-cq'
     return ''
   }

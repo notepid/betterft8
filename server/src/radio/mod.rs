@@ -8,10 +8,18 @@ use hamlib::RigCtld;
 use crate::state::{AppState, RadioStatus};
 
 pub async fn run(state: Arc<AppState>) {
-    let config = &state.config.radio;
+    // Copy radio config values eagerly — changes to config require restart to take effect.
+    let (rig_host, rig_port, poll_interval_ms) = {
+        let cfg = state.config.read().unwrap();
+        (
+            cfg.radio.rigctld_host.clone(),
+            cfg.radio.rigctld_port,
+            cfg.radio.poll_interval_ms,
+        )
+    };
 
     loop {
-        match RigCtld::connect(&config.rigctld_host, config.rigctld_port).await {
+        match RigCtld::connect(&rig_host, rig_port).await {
             Err(e) => {
                 tracing::warn!("rigctld not available: {}", e);
                 let _ = state.radio_tx.send(RadioStatus::default());
@@ -20,8 +28,8 @@ pub async fn run(state: Arc<AppState>) {
             Ok(rig) => {
                 tracing::info!(
                     "Connected to rigctld at {}:{}",
-                    config.rigctld_host,
-                    config.rigctld_port
+                    rig_host,
+                    rig_port
                 );
                 *state.rig.lock().await = Some(rig);
 
@@ -47,7 +55,7 @@ pub async fn run(state: Arc<AppState>) {
                         }
                     }
 
-                    tokio::time::sleep(Duration::from_millis(config.poll_interval_ms)).await;
+                    tokio::time::sleep(Duration::from_millis(poll_interval_ms)).await;
                 }
 
                 let _ = state.radio_tx.send(RadioStatus::default());

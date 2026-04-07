@@ -7,7 +7,14 @@ pub enum ServerMessage {
     Echo { payload: serde_json::Value },
     Error { message: String },
     /// First message sent to every client on connect.
-    Hello { needs_viewer_auth: bool },
+    Hello {
+        needs_viewer_auth: bool,
+        callsign:          String,
+        grid:              String,
+        log_file:          String,
+        rig_host:          String,
+        rig_port:          u16,
+    },
     /// Response to `Auth` (viewer) or indicates auth state.
     AuthResult { success: bool },
     /// Broadcast whenever operator lock changes; personalised per-client.
@@ -40,6 +47,33 @@ pub enum ServerMessage {
         next_tx:    Option<String>,
         tx_enabled: bool,
         tx_queued:  bool,
+    },
+    /// Broadcast when a QSO is successfully logged to ADIF.
+    LogEntry {
+        their_call: String,
+        their_grid: Option<String>,
+        rst_sent:   String,
+        rst_rcvd:   String,
+        freq_hz:    u64,
+        band:       String,
+        date:       String,
+        time_on:    String,
+    },
+    /// Sent on connect and on demand: available audio devices.
+    DeviceList {
+        inputs:  Vec<String>,
+        outputs: Vec<String>,
+    },
+    /// Response to a `ConfigUpdate` client message.
+    ConfigUpdateResult {
+        success:          bool,
+        message:          Option<String>,
+        requires_restart: bool,
+    },
+    /// Response to a `TestRigctld` client message.
+    RigctldTestResult {
+        success: bool,
+        message: String,
     },
 }
 
@@ -80,4 +114,12 @@ pub enum ClientMessage {
     SetTxParity { parity: u8 },
     /// Reset QSO state to Idle.
     ResetQso {},
+
+    /// Update a config section. Operator-only.
+    /// `section`: "station" | "audio" | "radio" | "network"
+    /// `values`: map of field name → new value (as JSON strings/numbers)
+    ConfigUpdate { section: String, values: serde_json::Value },
+
+    /// Test the configured rigctld connection. Operator-only.
+    TestRigctld {},
 }

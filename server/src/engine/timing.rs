@@ -4,8 +4,9 @@ use std::time::Duration;
 
 use chrono::Utc;
 
-use crate::engine::qso;
-use crate::state::{DecodeResult, QsoUpdate, SharedState, TxRequest};
+use crate::engine::{logger, qso};
+use crate::engine::qso::QsoState;
+use crate::state::{DecodeResult, LogEntryData, QsoUpdate, SharedState, TxRequest};
 use crate::dsp::ft8::DecodedMessage;
 
 /// Rolling audio buffer shared between the audio callback and this engine.
@@ -109,11 +110,33 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
 
         // ---- Advance QSO state machine --------------------------------------
         if state.tx_enabled.load(Ordering::Relaxed) {
-            let my_call = state.config.station.callsign.clone();
+            let my_call = state.config.read().unwrap().station.callsign.clone();
+
+            // Capture InQso details before advance (needed for ADIF logging).
+            let pre_qso_info = {
+                let qso_guard = state.qso.lock().await;
+                match &*qso_guard {
+                    QsoState::InQso { their_call, their_grid, their_report, my_report, .. } => {
+                        Some((their_call.clone(), their_grid.clone(), *their_report, *my_report))
+                    }
+                    _ => None,
+                }
+            };
+
             let next_msg = {
                 let mut qso_state = state.qso.lock().await;
                 qso::advance(&mut qso_state, &my_call, &decoded)
             };
+
+            // Log QSO if it just completed.
+            if pre_qso_info.is_some() && next_msg.is_none() {
+                let new_state = state.qso.lock().await;
+                if matches!(&*new_state, QsoState::Complete { .. }) {
+                    let (their_call, their_grid, their_report, my_report) = pre_qso_info.unwrap();
+                    drop(new_state); // release lock before I/O
+                    maybe_log_qso(&state, their_call, their_grid, their_report, my_report).await;
+                }
+            }
 
             if let Some(msg) = next_msg {
                 let tx_freq = state.qso.lock().await.tx_freq();
@@ -135,7 +158,6 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
                 }
             } else {
                 // QSO returned None (idle or complete) — nothing more to send
-                // Leave tx_queue as-is; if it's empty the next TX check will skip
             }
         }
 
@@ -152,6 +174,63 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
             let _ = state.qso_tx.send(update);
         }
     }
+}
+
+/// Write an ADIF log entry and broadcast a LogEntry message to all clients.
+async fn maybe_log_qso(
+    state:        &SharedState,
+    their_call:   String,
+    their_grid:   Option<String>,
+    their_report: Option<i32>,
+    my_report:    Option<i32>,
+) {
+    let freq_hz = state.last_radio_status.lock().await.freq;
+    let (my_call, my_grid, log_file) = {
+        let cfg = state.config.read().unwrap();
+        (cfg.station.callsign.clone(), cfg.station.grid.clone(), cfg.station.log_file.clone())
+    };
+
+    let now = Utc::now();
+    let qso_start = state.qso_start.lock().unwrap().unwrap_or(now);
+
+    let fmt_snr = |v: Option<i32>| v.map(|r| format!("{:+03}", r.clamp(-99, 99))).unwrap_or_else(|| "+00".to_string());
+    let rst_sent = fmt_snr(my_report);
+    let rst_rcvd = fmt_snr(their_report);
+
+    let entry = logger::QsoLogEntry {
+        their_call: their_call.clone(),
+        their_grid: their_grid.clone(),
+        rst_sent: rst_sent.clone(),
+        rst_rcvd: rst_rcvd.clone(),
+        qso_start,
+        qso_end: now,
+        freq_hz,
+        my_call,
+        my_grid,
+    };
+
+    let adif = logger::AdifLogger::new(std::path::Path::new(&log_file));
+    if let Err(e) = adif.log_qso(&entry) {
+        tracing::error!("ADIF log error: {e}");
+    } else {
+        tracing::info!("QSO logged: {} → {}", their_call, log_file);
+    }
+
+    let band = logger::band_from_freq(freq_hz).to_string();
+    let log_data = LogEntryData {
+        their_call,
+        their_grid,
+        rst_sent,
+        rst_rcvd,
+        freq_hz,
+        band,
+        date:     qso_start.format("%Y%m%d").to_string(),
+        time_on:  qso_start.format("%H%M%S").to_string(),
+    };
+    let _ = state.log_tx.send(log_data);
+
+    // Clear the QSO start time.
+    *state.qso_start.lock().unwrap() = None;
 }
 
 /// Execute a full TX cycle: PTT on → audio → PTT off.

@@ -52,6 +52,11 @@ export type QsoUpdateMessage = {
 export type HelloMessage = {
   type: 'hello'
   needs_viewer_auth: boolean
+  callsign: string
+  grid: string
+  log_file: string
+  rig_host: string
+  rig_port: number
 }
 
 export type AuthResultMessage = {
@@ -66,6 +71,37 @@ export type OperatorStatusMessage = {
   client_count: number
 }
 
+export type LogEntryMessage = {
+  type: 'log_entry'
+  their_call: string
+  their_grid: string | null
+  rst_sent: string
+  rst_rcvd: string
+  freq_hz: number
+  band: string
+  date: string
+  time_on: string
+}
+
+export type DeviceListMessage = {
+  type: 'device_list'
+  inputs: string[]
+  outputs: string[]
+}
+
+export type ConfigUpdateResultMessage = {
+  type: 'config_update_result'
+  success: boolean
+  message: string | null
+  requires_restart: boolean
+}
+
+export type RigctldTestResultMessage = {
+  type: 'rigctld_test_result'
+  success: boolean
+  message: string
+}
+
 export type ServerMessage =
   | { type: 'echo'; payload: unknown }
   | { type: 'error'; message: string }
@@ -76,6 +112,10 @@ export type ServerMessage =
   | DecodeMessage
   | RadioStatusMessage
   | QsoUpdateMessage
+  | LogEntryMessage
+  | DeviceListMessage
+  | ConfigUpdateResultMessage
+  | RigctldTestResultMessage
 
 export type ClientMessage =
   | { type: 'ping' }
@@ -91,3 +131,5 @@ export type ClientMessage =
   | { type: 'enable_tx'; enabled: boolean }
   | { type: 'set_tx_parity'; parity: number }
   | { type: 'reset_qso' }
+  | { type: 'config_update'; section: string; values: Record<string, unknown> }
+  | { type: 'test_rigctld' }

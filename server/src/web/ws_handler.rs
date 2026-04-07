@@ -6,11 +6,12 @@ use axum::{
     response::Response,
 };
 use axum::extract::ws::{Message, WebSocket};
+use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{broadcast, mpsc};
 
 use crate::engine::qso::{self, QsoState};
-use crate::state::{QsoUpdate, SharedState, TxRequest};
+use crate::state::{LogEntryData, QsoUpdate, SharedState, TxRequest};
 use crate::web::session::ClientId;
 use super::messages::{ClientMessage, DecodedMessageJson, ServerMessage};
 
@@ -32,12 +33,23 @@ async fn handle_socket(socket: WebSocket, state: SharedState, remote_addr: Strin
     let mut decode_rx    = state.decode_tx.subscribe();
     let mut radio_rx     = state.radio_tx.subscribe();
     let mut qso_rx       = state.qso_tx.subscribe();
+    let mut log_rx       = state.log_tx.subscribe();
 
     // Local auth flag — avoids per-message session lookups for the hot broadcast path
     let mut authenticated = !state.sessions.needs_viewer_auth();
 
     // Send Hello so the client knows whether to show the viewer password form
-    let hello = ServerMessage::Hello { needs_viewer_auth: state.sessions.needs_viewer_auth() };
+    let hello = {
+        let cfg = state.config.read().unwrap();
+        ServerMessage::Hello {
+            needs_viewer_auth: state.sessions.needs_viewer_auth(),
+            callsign: cfg.station.callsign.clone(),
+            grid:     cfg.station.grid.clone(),
+            log_file: cfg.station.log_file.clone(),
+            rig_host: cfg.radio.rigctld_host.clone(),
+            rig_port: cfg.radio.rigctld_port,
+        }
+    };
     if send_msg(&mut sender, &hello).await.is_err() {
         state.sessions.disconnect(client_id).await;
         return;
@@ -149,12 +161,38 @@ async fn handle_socket(socket: WebSocket, state: SharedState, remote_addr: Strin
                     Err(broadcast::error::RecvError::Closed) => break,
                 }
             }
+
+            entry = log_rx.recv(), if authenticated => {
+                match entry {
+                    Ok(entry) => {
+                        let msg = log_entry_msg(entry);
+                        if send_msg(&mut sender, &msg).await.is_err() { break; }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                        tracing::warn!(client_id = %client_id, "lagged by {n} log entries");
+                    }
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
         }
     }
 
     state.sessions.disconnect(client_id).await;
     state.sessions.broadcast_operator_status().await;
     tracing::info!(client_id = %client_id, "WebSocket disconnected");
+}
+
+fn log_entry_msg(entry: LogEntryData) -> ServerMessage {
+    ServerMessage::LogEntry {
+        their_call: entry.their_call,
+        their_grid: entry.their_grid,
+        rst_sent:   entry.rst_sent,
+        rst_rcvd:   entry.rst_rcvd,
+        freq_hz:    entry.freq_hz,
+        band:       entry.band,
+        date:       entry.date,
+        time_on:    entry.time_on,
+    }
 }
 
 /// Send current full state to a newly (re)authenticated client.
@@ -198,6 +236,15 @@ async fn send_initial_state(
             let msg = ServerMessage::Decode { period: period.period, messages };
             let _ = send_msg(sender, &msg).await;
         }
+    }
+
+    // Audio device list
+    {
+        let msg = ServerMessage::DeviceList {
+            inputs:  state.audio_input_devices.clone(),
+            outputs: state.audio_output_devices.clone(),
+        };
+        let _ = send_msg(sender, &msg).await;
     }
 
     // Operator status (personalised for this client)
@@ -250,6 +297,8 @@ async fn handle_client_message(
         | ClientMessage::SetFrequency { .. }
         | ClientMessage::SetMode { .. }
         | ClientMessage::ResetQso {}
+        | ClientMessage::ConfigUpdate { .. }
+        | ClientMessage::TestRigctld {}
     );
 
     match serde_json::from_str::<ClientMessage>(text) {
@@ -315,8 +364,10 @@ async fn handle_client_message(
                 }
 
                 ClientMessage::CallCq { freq } => {
-                    let my_call = state.config.station.callsign.clone();
-                    let my_grid = state.config.station.grid.clone();
+                    let (my_call, my_grid) = {
+                        let cfg = state.config.read().unwrap();
+                        (cfg.station.callsign.clone(), cfg.station.grid.clone())
+                    };
                     let msg_text = qso::cq_message(&my_call, &my_grid);
 
                     match encode_tx(&msg_text, freq, state.tx_sample_rate).await {
@@ -326,6 +377,7 @@ async fn handle_client_message(
                                 my_grid,
                                 tx_freq: freq,
                             };
+                            *state.qso_start.lock().unwrap() = Some(Utc::now());
                             *state.tx_queue.lock().await = Some(TxRequest { samples, message: msg_text.clone() });
                             state.tx_enabled.store(true, Ordering::Relaxed);
                             tracing::info!("CallCQ queued: {}", msg_text);
@@ -340,8 +392,10 @@ async fn handle_client_message(
                 }
 
                 ClientMessage::RespondTo { their_call, their_freq: _, tx_freq } => {
-                    let my_call = state.config.station.callsign.clone();
-                    let my_grid = state.config.station.grid.clone();
+                    let (my_call, my_grid) = {
+                        let cfg = state.config.read().unwrap();
+                        (cfg.station.callsign.clone(), cfg.station.grid.clone())
+                    };
                     let msg_text = qso::grid_response(&their_call, &my_call, &my_grid);
 
                     match encode_tx(&msg_text, tx_freq, state.tx_sample_rate).await {
@@ -355,6 +409,7 @@ async fn handle_client_message(
                                 step:         crate::engine::qso::QsoStep::SentGrid,
                                 tx_freq,
                             };
+                            *state.qso_start.lock().unwrap() = Some(Utc::now());
                             *state.tx_queue.lock().await = Some(TxRequest { samples, message: msg_text.clone() });
                             state.tx_enabled.store(true, Ordering::Relaxed);
                             tracing::info!("RespondTo {} queued: {}", their_call, msg_text);
@@ -400,10 +455,34 @@ async fn handle_client_message(
 
                 ClientMessage::ResetQso {} => {
                     *state.qso.lock().await = QsoState::Idle;
+                    *state.qso_start.lock().unwrap() = None;
                     state.tx_enabled.store(false, Ordering::Relaxed);
                     state.tx_queue.lock().await.take();
                     tracing::info!("QSO reset");
                     broadcast_qso_update(state).await;
+                }
+
+                ClientMessage::ConfigUpdate { section, values } => {
+                    let reply = handle_config_update(state, &section, &values).await;
+                    let _ = send_msg(sender, &reply).await;
+                }
+
+                ClientMessage::TestRigctld {} => {
+                    let (host, port) = {
+                        let cfg = state.config.read().unwrap();
+                        (cfg.radio.rigctld_host.clone(), cfg.radio.rigctld_port)
+                    };
+                    let reply = match crate::radio::hamlib::RigCtld::connect(&host, port).await {
+                        Ok(_) => ServerMessage::RigctldTestResult {
+                            success: true,
+                            message: format!("Connected to {}:{}", host, port),
+                        },
+                        Err(e) => ServerMessage::RigctldTestResult {
+                            success: false,
+                            message: format!("Failed: {e}"),
+                        },
+                    };
+                    let _ = send_msg(sender, &reply).await;
                 }
             }
 
@@ -417,6 +496,127 @@ async fn handle_client_message(
             Ok(false)
         }
     }
+}
+
+async fn handle_config_update(
+    state:   &SharedState,
+    section: &str,
+    values:  &serde_json::Value,
+) -> ServerMessage {
+    let vals = match values.as_object() {
+        Some(m) => m,
+        None => return ServerMessage::ConfigUpdateResult {
+            success: false,
+            message: Some("values must be an object".into()),
+            requires_restart: false,
+        },
+    };
+
+    match section {
+        "station" => {
+            let callsign = vals.get("callsign").and_then(|v| v.as_str()).map(|s| s.to_uppercase());
+            let grid     = vals.get("grid").and_then(|v| v.as_str()).map(|s| s.to_uppercase());
+
+            if let Some(ref c) = callsign {
+                if !valid_callsign(c) {
+                    return ServerMessage::ConfigUpdateResult {
+                        success: false,
+                        message: Some(format!("Invalid callsign: {c}")),
+                        requires_restart: false,
+                    };
+                }
+            }
+            if let Some(ref g) = grid {
+                if !valid_grid(g) {
+                    return ServerMessage::ConfigUpdateResult {
+                        success: false,
+                        message: Some(format!("Invalid grid: {g}")),
+                        requires_restart: false,
+                    };
+                }
+            }
+
+            {
+                let mut cfg = state.config.write().unwrap();
+                if let Some(c) = callsign {
+                    cfg.station.callsign = c;
+                }
+                if let Some(g) = grid {
+                    cfg.station.grid = g;
+                }
+                if let Err(e) = crate::config::save(&cfg) {
+                    tracing::warn!("Config save failed: {e}");
+                }
+            }
+            tracing::info!("Station config updated");
+            ServerMessage::ConfigUpdateResult { success: true, message: None, requires_restart: false }
+        }
+
+        "radio" => {
+            {
+                let mut cfg = state.config.write().unwrap();
+                if let Some(h) = vals.get("rigctld_host").and_then(|v| v.as_str()) {
+                    cfg.radio.rigctld_host = h.to_string();
+                }
+                if let Some(p) = vals.get("rigctld_port").and_then(|v| v.as_u64()) {
+                    cfg.radio.rigctld_port = p as u16;
+                }
+                if let Err(e) = crate::config::save(&cfg) {
+                    tracing::warn!("Config save failed: {e}");
+                }
+            }
+            tracing::info!("Radio config updated");
+            ServerMessage::ConfigUpdateResult {
+                success: true,
+                message: Some("Radio config saved; restart to apply.".into()),
+                requires_restart: true,
+            }
+        }
+
+        "audio" => {
+            {
+                let mut cfg = state.config.write().unwrap();
+                if let Some(d) = vals.get("input_device").and_then(|v| v.as_str()) {
+                    cfg.audio.input_device = if d.is_empty() { None } else { Some(d.to_string()) };
+                }
+                if let Some(d) = vals.get("output_device").and_then(|v| v.as_str()) {
+                    cfg.audio.output_device = if d.is_empty() { None } else { Some(d.to_string()) };
+                }
+                if let Err(e) = crate::config::save(&cfg) {
+                    tracing::warn!("Config save failed: {e}");
+                }
+            }
+            tracing::info!("Audio config updated");
+            ServerMessage::ConfigUpdateResult {
+                success: true,
+                message: Some("Audio config saved; restart to apply.".into()),
+                requires_restart: true,
+            }
+        }
+
+        other => ServerMessage::ConfigUpdateResult {
+            success: false,
+            message: Some(format!("Unknown config section: {other}")),
+            requires_restart: false,
+        },
+    }
+}
+
+fn valid_callsign(call: &str) -> bool {
+    let len = call.len();
+    len >= 3
+        && len <= 13
+        && call.chars().all(|c| c.is_ascii_alphanumeric() || c == '/' || c == '-')
+}
+
+fn valid_grid(grid: &str) -> bool {
+    let b = grid.as_bytes();
+    b.len() >= 4
+        && b.len() <= 6
+        && b[0].is_ascii_alphabetic()
+        && b[1].is_ascii_alphabetic()
+        && b[2].is_ascii_digit()
+        && b[3].is_ascii_digit()
 }
 
 /// Encode FT8 audio in a blocking thread pool.

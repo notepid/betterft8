@@ -1,5 +1,13 @@
 import { writable } from 'svelte/store'
-import type { OperatorStatusMessage, QsoUpdateMessage, RadioStatusMessage, ServerMessage, WaterfallMessage } from './messages'
+import type {
+  LogEntryMessage,
+  OperatorStatusMessage,
+  QsoUpdateMessage,
+  RadioStatusMessage,
+  RigctldTestResultMessage,
+  ServerMessage,
+  WaterfallMessage,
+} from './messages'
 
 export const connected = writable(false)
 export const lastMessage = writable<ServerMessage | null>(null)
@@ -13,6 +21,13 @@ export const operatorStatus = writable<OperatorStatusMessage | null>(null)
 export const needsAuth = writable(false)
 /** Last auth-related error message (viewer password or operator claim failure). */
 export const authError = writable<string | null>(null)
+
+/** Station callsign received from server Hello. */
+export const myCall = writable<string>('')
+/** Station grid received from server Hello. */
+export const myGrid = writable<string>('')
+/** Log file path received from server Hello. */
+export const logFile = writable<string>('ft8.adi')
 
 export type Decode = {
   period: number
@@ -37,3 +52,30 @@ export function addDecodes(period: number, entries: Array<{ snr: number; dt: num
 
 // Decode that the user has clicked to respond to
 export const selectedDecode = writable<Decode | null>(null)
+
+// ---- Settings ---------------------------------------------------------------
+
+/** Whether the Settings panel is open. */
+export const settingsOpen = writable<boolean>(false)
+
+/** Alert sound enabled (when callsign is heard). */
+export const alertEnabled = writable<boolean>(true)
+
+/** Waterfall color scheme. */
+export const waterfallScheme = writable<'classic' | 'greyscale' | 'heat'>('classic')
+
+/** Available audio devices from server. */
+export const deviceList = writable<{ inputs: string[]; outputs: string[] }>({ inputs: [], outputs: [] })
+
+/** Recent QSO log entries. */
+export const logEntries = writable<LogEntryMessage[]>([])
+
+/** Result of the last rigctld test. */
+export const rigctldTestResult = writable<RigctldTestResultMessage | null>(null)
+
+/** Result of the last config update (shown in Settings). */
+export const configUpdateResult = writable<{ success: boolean; message: string | null; requires_restart: boolean } | null>(null)
+
+/** rigctld connection info from Hello (pre-populate Settings form). */
+export const rigHost = writable<string>('localhost')
+export const rigPort = writable<number>(4532)
