@@ -2,6 +2,8 @@ use anyhow::{anyhow, Result};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 
+use super::RadioBackend;
+
 pub struct RigCtld {
     reader: BufReader<tokio::net::tcp::OwnedReadHalf>,
     writer: tokio::net::tcp::OwnedWriteHalf,
@@ -51,7 +53,10 @@ impl RigCtld {
         }
     }
 
-    pub async fn get_frequency(&mut self) -> Result<u64> {
+}
+
+impl RadioBackend for RigCtld {
+    async fn get_frequency(&mut self) -> Result<u64> {
         let lines = self.send_command("+f").await?;
         for line in &lines {
             if let Some(val) = line.strip_prefix("Frequency: ") {
@@ -61,12 +66,12 @@ impl RigCtld {
         Err(anyhow!("Frequency not found in response: {:?}", lines))
     }
 
-    pub async fn set_frequency(&mut self, freq: u64) -> Result<()> {
+    async fn set_frequency(&mut self, freq: u64) -> Result<()> {
         self.send_command(&format!("+F {}", freq)).await?;
         Ok(())
     }
 
-    pub async fn get_mode(&mut self) -> Result<(String, i32)> {
+    async fn get_mode(&mut self) -> Result<(String, i32)> {
         let lines = self.send_command("+m").await?;
         let mut mode = String::new();
         let mut passband = 0i32;
@@ -83,12 +88,12 @@ impl RigCtld {
         Ok((mode, passband))
     }
 
-    pub async fn set_mode(&mut self, mode: &str, passband: i32) -> Result<()> {
+    async fn set_mode(&mut self, mode: &str, passband: i32) -> Result<()> {
         self.send_command(&format!("+M {} {}", mode, passband)).await?;
         Ok(())
     }
 
-    pub async fn get_ptt(&mut self) -> Result<bool> {
+    async fn get_ptt(&mut self) -> Result<bool> {
         let lines = self.send_command("+t").await?;
         for line in &lines {
             if let Some(val) = line.strip_prefix("PTT: ") {
@@ -98,7 +103,7 @@ impl RigCtld {
         Err(anyhow!("PTT not found in response: {:?}", lines))
     }
 
-    pub async fn set_ptt(&mut self, on: bool) -> Result<()> {
+    async fn set_ptt(&mut self, on: bool) -> Result<()> {
         self.send_command(&format!("+T {}", if on { 1 } else { 0 })).await?;
         Ok(())
     }

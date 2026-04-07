@@ -61,16 +61,36 @@ impl Default for AudioConfig {
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct RadioConfig {
+    /// Backend to use: "rigctld" (default) or "hamlib" (direct, no daemon).
+    #[serde(default = "default_backend")]
+    pub backend: String,
+    // rigctld backend settings
     pub rigctld_host: String,
     pub rigctld_port: u16,
+    // hamlib direct backend settings
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rig_model: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub serial_port: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baud_rate: Option<u32>,
+    // shared
     pub poll_interval_ms: u64,
+}
+
+fn default_backend() -> String {
+    "rigctld".to_string()
 }
 
 impl Default for RadioConfig {
     fn default() -> Self {
         RadioConfig {
+            backend: default_backend(),
             rigctld_host: "localhost".to_string(),
             rigctld_port: 4532,
+            rig_model: None,
+            serial_port: None,
+            baud_rate: None,
             poll_interval_ms: 2000,
         }
     }

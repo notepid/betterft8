@@ -5,8 +5,8 @@ static_files = "../client/dist"
 operator_password = "changeme"
 
 [station]
-callsign = "N0CALL"
-grid = "AA00"
+callsign = "LB1DK"
+grid = "JP53"
 
 [audio]
 # input_device = "My Microphone"   # omit for system default
@@ -14,6 +14,17 @@ grid = "AA00"
 sample_rate = 12000
 
 [radio]
+# backend = "rigctld" (default) talks to a rigctld daemon over TCP
+# backend = "hamlib"  controls the radio directly via the Hamlib C library (no daemon needed)
+backend = "rigctld"
+
+# rigctld backend settings
 rigctld_host = "localhost"
 rigctld_port = 4532
+
+# hamlib direct backend settings (used when backend = "hamlib")
+# rig_model = 1049       # Hamlib model number (e.g. 1=Dummy, 1035=IC-7300, 1037=IC-7610, 3085=FT-891, 3086=FT-991A)
+# serial_port = "COM3"   # serial/USB port for the radio
+# baud_rate = 19200       # serial baud rate (check your radio's CAT settings)
+
 poll_interval_ms = 2000

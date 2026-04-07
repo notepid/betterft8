@@ -157,3 +157,10 @@ Cargo.lock
 
 docs/plan/
 settings.local.json
+
+# Vendored Hamlib — zip is tracked, extracted files are not
+server/hamlib-lib/*.lib
+server/hamlib-lib/*.a
+server/hamlib-lib/*.dll
+server/hamlib-lib/*.exp
+server/hamlib-lib/include/

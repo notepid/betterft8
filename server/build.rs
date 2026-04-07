@@ -30,4 +30,37 @@ fn main() {
     println!("cargo:rerun-if-changed=ft8_lib/");
     println!("cargo:rerun-if-changed=ft8_wrapper.c");
     println!("cargo:rerun-if-changed=ft8_wrapper.h");
+
+    // Link the Hamlib library when the feature is enabled.
+    // On Windows: auto-extracts hamlib-w64.zip if hamlib.lib is missing.
+    // On Linux: expects system-installed libhamlib-dev.
+    #[cfg(feature = "hamlib")]
+    {
+        let hamlib_dir = std::path::Path::new("hamlib-lib");
+
+        // Auto-extract the vendored Windows zip if the import lib is missing.
+        if cfg!(target_os = "windows") {
+            let lib_file = hamlib_dir.join("hamlib.lib");
+            let zip_file = hamlib_dir.join("hamlib-w64.zip");
+            if !lib_file.exists() && zip_file.exists() {
+                println!("cargo:warning=Extracting hamlib-w64.zip...");
+                let file = std::fs::File::open(&zip_file)
+                    .expect("failed to open hamlib-w64.zip");
+                let mut archive = zip::ZipArchive::new(file)
+                    .expect("failed to read hamlib-w64.zip");
+                archive.extract(hamlib_dir)
+                    .expect("failed to extract hamlib-w64.zip");
+            }
+        }
+
+        let hamlib_dir = hamlib_dir
+            .canonicalize()
+            .expect("hamlib-lib/ directory not found — see README for setup instructions");
+        println!("cargo:rustc-link-search=native={}", hamlib_dir.display());
+        println!("cargo:rustc-link-lib=dylib=hamlib");
+        if cfg!(target_os = "windows") {
+            println!("cargo:rustc-link-lib=ws2_32");
+        }
+        println!("cargo:rerun-if-changed=hamlib-lib/hamlib-w64.zip");
+    }
 }
