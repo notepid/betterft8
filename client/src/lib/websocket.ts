@@ -1,5 +1,5 @@
 import type { ClientMessage, ServerMessage } from './messages'
-import { connected, lastMessage, waterfallLine } from './stores'
+import { connected, lastMessage, waterfallLine, addDecodes } from './stores'
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`
 
@@ -34,6 +34,8 @@ class BetterFT8Client {
         const msg = JSON.parse(event.data) as ServerMessage
         if (msg.type === 'waterfall') {
           waterfallLine.set(msg)
+        } else if (msg.type === 'decode') {
+          addDecodes(msg.period, msg.messages)
         } else {
           lastMessage.set(msg)
         }

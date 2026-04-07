@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
@@ -7,10 +9,13 @@ use ringbuf::traits::{Split, Producer};
 use crate::config::AudioConfig;
 
 pub type RingConsumer = ringbuf::HeapCons<f32>;
+/// Shared rolling audio buffer used by the FT8 decode engine.
+pub type AudioBuf = Arc<Mutex<Vec<f32>>>;
 
 /// Start audio capture. Returns the ring buffer consumer, effective sample rate,
 /// and the cpal Stream (must be kept alive).
-pub fn start_capture(config: &AudioConfig) -> Result<(RingConsumer, u32, cpal::Stream)> {
+/// `decode_buf` receives every post-decimation mono sample for the FT8 engine.
+pub fn start_capture(config: &AudioConfig, decode_buf: AudioBuf) -> Result<(RingConsumer, u32, cpal::Stream)> {
     let host = cpal::default_host();
 
     let device = if let Some(name) = &config.input_device {
@@ -66,6 +71,7 @@ pub fn start_capture(config: &AudioConfig) -> Result<(RingConsumer, u32, cpal::S
     let stream = match sample_format {
         SampleFormat::F32 => {
             let mut prod = prod;
+            let db = decode_buf.clone();
             let mut mono_acc = 0f32;
             let mut mono_count = 0usize;
             let mut dec_count = 0usize;
@@ -73,13 +79,14 @@ pub fn start_capture(config: &AudioConfig) -> Result<(RingConsumer, u32, cpal::S
                 &stream_config,
                 move |data: &[f32], _| {
                     write_samples(data, native_channels, decimate_factor,
-                        &mut prod, &mut mono_acc, &mut mono_count, &mut dec_count);
+                        &mut prod, &db, &mut mono_acc, &mut mono_count, &mut dec_count);
                 },
                 err_fn, None,
             )?
         }
         SampleFormat::I16 => {
             let mut prod = prod;
+            let db = decode_buf.clone();
             let mut mono_acc = 0f32;
             let mut mono_count = 0usize;
             let mut dec_count = 0usize;
@@ -88,13 +95,14 @@ pub fn start_capture(config: &AudioConfig) -> Result<(RingConsumer, u32, cpal::S
                 move |data: &[i16], _| {
                     let converted: Vec<f32> = data.iter().map(|&s| s as f32 / 32768.0).collect();
                     write_samples(&converted, native_channels, decimate_factor,
-                        &mut prod, &mut mono_acc, &mut mono_count, &mut dec_count);
+                        &mut prod, &db, &mut mono_acc, &mut mono_count, &mut dec_count);
                 },
                 err_fn, None,
             )?
         }
         SampleFormat::I32 => {
             let mut prod = prod;
+            let db = decode_buf.clone();
             let mut mono_acc = 0f32;
             let mut mono_count = 0usize;
             let mut dec_count = 0usize;
@@ -103,13 +111,14 @@ pub fn start_capture(config: &AudioConfig) -> Result<(RingConsumer, u32, cpal::S
                 move |data: &[i32], _| {
                     let converted: Vec<f32> = data.iter().map(|&s| s as f32 / 2_147_483_648.0).collect();
                     write_samples(&converted, native_channels, decimate_factor,
-                        &mut prod, &mut mono_acc, &mut mono_count, &mut dec_count);
+                        &mut prod, &db, &mut mono_acc, &mut mono_count, &mut dec_count);
                 },
                 err_fn, None,
             )?
         }
         SampleFormat::U16 => {
             let mut prod = prod;
+            let db = decode_buf.clone();
             let mut mono_acc = 0f32;
             let mut mono_count = 0usize;
             let mut dec_count = 0usize;
@@ -120,7 +129,7 @@ pub fn start_capture(config: &AudioConfig) -> Result<(RingConsumer, u32, cpal::S
                         .map(|&s| (s as f32 - 32768.0) / 32768.0)
                         .collect();
                     write_samples(&converted, native_channels, decimate_factor,
-                        &mut prod, &mut mono_acc, &mut mono_count, &mut dec_count);
+                        &mut prod, &db, &mut mono_acc, &mut mono_count, &mut dec_count);
                 },
                 err_fn, None,
             )?
@@ -132,11 +141,15 @@ pub fn start_capture(config: &AudioConfig) -> Result<(RingConsumer, u32, cpal::S
     Ok((cons, effective_rate, stream))
 }
 
+/// Maximum samples kept in the decode buffer (20 seconds at target rate).
+const MAX_DECODE_SAMPLES: usize = 12000 * 20;
+
 fn write_samples(
     data: &[f32],
     channels: usize,
     decimate: usize,
     prod: &mut impl Producer<Item = f32>,
+    decode_buf: &AudioBuf,
     mono_acc: &mut f32,
     mono_count: &mut usize,
     dec_count: &mut usize,
@@ -152,6 +165,14 @@ fn write_samples(
             if *dec_count >= decimate {
                 *dec_count = 0;
                 let _ = prod.try_push(mono);
+                // Non-blocking write to decode buffer; drop sample if locked.
+                if let Ok(mut buf) = decode_buf.try_lock() {
+                    buf.push(mono);
+                    if buf.len() > MAX_DECODE_SAMPLES {
+                        let excess = buf.len() - MAX_DECODE_SAMPLES;
+                        buf.drain(..excess);
+                    }
+                }
             }
         }
     }

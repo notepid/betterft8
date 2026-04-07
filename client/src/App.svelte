@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { client } from './lib/websocket'
-  import { connected, lastMessage } from './lib/stores'
+  import { connected } from './lib/stores'
   import Waterfall from './components/Waterfall.svelte'
+  import DecodeList from './components/DecodeList.svelte'
 
   onMount(() => {
     client.connect()
@@ -25,12 +26,10 @@
     <Waterfall />
   </section>
 
-  {#if $lastMessage}
-    <section class="last-msg">
-      <h2>Last message</h2>
-      <pre>{JSON.stringify($lastMessage, null, 2)}</pre>
-    </section>
-  {/if}
+  <section class="decode-section">
+    <h2>Decoded Messages</h2>
+    <DecodeList />
+  </section>
 </main>
 
 <style>
@@ -76,18 +75,13 @@
     margin-bottom: 1rem;
   }
 
-  .last-msg h2 {
-    font-size: 0.9rem;
-    color: #888;
-    margin: 0.5rem 0;
+  .decode-section {
+    margin-top: 1rem;
   }
 
-  pre {
-    background: #0f0f1e;
-    padding: 1rem;
-    border-radius: 4px;
-    overflow: auto;
-    color: #7ec8e3;
-    font-size: 0.8rem;
+  .decode-section h2 {
+    font-size: 0.9rem;
+    color: #888;
+    margin: 0 0 0.4rem;
   }
 </style>

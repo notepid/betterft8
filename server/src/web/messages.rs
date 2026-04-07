@@ -8,10 +8,22 @@ pub enum ServerMessage {
     Error { message: String },
     Waterfall {
         timestamp: f64,
-        freq_min: u32,
-        freq_max: u32,
-        data: String, // base64
+        freq_min:  u32,
+        freq_max:  u32,
+        data:      String, // base64
     },
+    Decode {
+        period:   u64,
+        messages: Vec<DecodedMessageJson>,
+    },
+}
+
+#[derive(Serialize, Clone)]
+pub struct DecodedMessageJson {
+    pub snr:     i32,
+    pub dt:      f32,
+    pub freq:    f32,
+    pub message: String,
 }
 
 /// Messages sent from Client → Server

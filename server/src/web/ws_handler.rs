@@ -8,7 +8,7 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::state::SharedState;
-use super::messages::{ClientMessage, ServerMessage};
+use super::messages::{ClientMessage, DecodedMessageJson, ServerMessage};
 
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
@@ -23,6 +23,7 @@ async fn handle_socket(socket: WebSocket, state: SharedState) {
 
     let (mut sender, mut receiver) = socket.split();
     let mut waterfall_rx = state.waterfall_tx.subscribe();
+    let mut decode_rx    = state.decode_tx.subscribe();
 
     loop {
         tokio::select! {
@@ -54,14 +55,15 @@ async fn handle_socket(socket: WebSocket, state: SharedState) {
                     _ => {}
                 }
             }
+
             line = waterfall_rx.recv() => {
                 match line {
                     Ok(line) => {
                         let msg = ServerMessage::Waterfall {
                             timestamp: line.timestamp,
-                            freq_min: line.freq_min,
-                            freq_max: line.freq_max,
-                            data: line.data_b64,
+                            freq_min:  line.freq_min,
+                            freq_max:  line.freq_max,
+                            data:      line.data_b64,
                         };
                         let json = serde_json::to_string(&msg).unwrap();
                         if sender.send(Message::Text(json.into())).await.is_err() {
@@ -70,6 +72,33 @@ async fn handle_socket(socket: WebSocket, state: SharedState) {
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {
                         tracing::warn!(conn_id = %conn_id, "client lagged by {n} waterfall lines");
+                    }
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+
+            result = decode_rx.recv() => {
+                match result {
+                    Ok(result) => {
+                        let messages: Vec<DecodedMessageJson> = result.messages.iter().map(|m| {
+                            DecodedMessageJson {
+                                snr:     m.snr,
+                                dt:      m.dt,
+                                freq:    m.freq,
+                                message: m.message.clone(),
+                            }
+                        }).collect();
+                        let msg = ServerMessage::Decode {
+                            period: result.period,
+                            messages,
+                        };
+                        let json = serde_json::to_string(&msg).unwrap();
+                        if sender.send(Message::Text(json.into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                        tracing::warn!(conn_id = %conn_id, "client lagged by {n} decode results");
                     }
                     Err(broadcast::error::RecvError::Closed) => break,
                 }
