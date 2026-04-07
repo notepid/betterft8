@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { client } from './lib/websocket'
   import { connected, lastMessage } from './lib/stores'
+  import Waterfall from './components/Waterfall.svelte'
 
   onMount(() => {
     client.connect()
@@ -20,14 +21,16 @@
     </span>
   </header>
 
-  <section>
-    <h2>Last message</h2>
-    {#if $lastMessage}
-      <pre>{JSON.stringify($lastMessage, null, 2)}</pre>
-    {:else}
-      <p class="muted">Waiting for server…</p>
-    {/if}
+  <section class="waterfall-section">
+    <Waterfall />
   </section>
+
+  {#if $lastMessage}
+    <section class="last-msg">
+      <h2>Last message</h2>
+      <pre>{JSON.stringify($lastMessage, null, 2)}</pre>
+    </section>
+  {/if}
 </main>
 
 <style>
@@ -39,16 +42,16 @@
   }
 
   main {
-    max-width: 800px;
+    max-width: 1200px;
     margin: 0 auto;
-    padding: 1.5rem;
+    padding: 1rem 1.5rem;
   }
 
   header {
     display: flex;
     align-items: center;
     gap: 1rem;
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
   }
 
   h1 {
@@ -69,15 +72,22 @@
     background: #27ae60;
   }
 
+  .waterfall-section {
+    margin-bottom: 1rem;
+  }
+
+  .last-msg h2 {
+    font-size: 0.9rem;
+    color: #888;
+    margin: 0.5rem 0;
+  }
+
   pre {
     background: #0f0f1e;
     padding: 1rem;
     border-radius: 4px;
     overflow: auto;
     color: #7ec8e3;
-  }
-
-  .muted {
-    color: #666;
+    font-size: 0.8rem;
   }
 </style>

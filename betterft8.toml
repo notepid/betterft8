@@ -7,3 +7,7 @@ operator_password = "changeme"
 [station]
 callsign = "N0CALL"
 grid = "AA00"
+
+[audio]
+# input_device = "My Microphone"  # omit for system default
+sample_rate = 12000

@@ -1,5 +1,5 @@
 import type { ClientMessage, ServerMessage } from './messages'
-import { connected, lastMessage } from './stores'
+import { connected, lastMessage, waterfallLine } from './stores'
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`
 
@@ -32,7 +32,11 @@ class BetterFT8Client {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data) as ServerMessage
-        lastMessage.set(msg)
+        if (msg.type === 'waterfall') {
+          waterfallLine.set(msg)
+        } else {
+          lastMessage.set(msg)
+        }
       } catch (e) {
         console.error('Failed to parse message', e)
       }

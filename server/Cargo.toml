@@ -15,3 +15,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
 futures-util = "0.3"
+cpal = "0.15"
+realfft = "3"
+num-complex = "0.4"
+base64 = { version = "0.22", features = ["std"] }
+ringbuf = "0.4"

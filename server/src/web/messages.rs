@@ -6,6 +6,12 @@ use serde::{Deserialize, Serialize};
 pub enum ServerMessage {
     Echo { payload: serde_json::Value },
     Error { message: String },
+    Waterfall {
+        timestamp: f64,
+        freq_min: u32,
+        freq_max: u32,
+        data: String, // base64
+    },
 }
 
 /// Messages sent from Client → Server

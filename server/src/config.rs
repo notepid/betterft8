@@ -5,6 +5,8 @@ use serde::Deserialize;
 pub struct Config {
     pub network: NetworkConfig,
     pub station: StationConfig,
+    #[serde(default)]
+    pub audio: AudioConfig,
 }
 
 #[derive(Deserialize, Clone)]
@@ -22,6 +24,21 @@ pub struct StationConfig {
     pub grid: String,
 }
 
+#[derive(Deserialize, Clone)]
+pub struct AudioConfig {
+    pub input_device: Option<String>,
+    pub sample_rate: u32,
+}
+
+impl Default for AudioConfig {
+    fn default() -> Self {
+        AudioConfig {
+            input_device: None,
+            sample_rate: 12000,
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
@@ -36,6 +53,7 @@ impl Default for Config {
                 callsign: "N0CALL".to_string(),
                 grid: "AA00".to_string(),
             },
+            audio: AudioConfig::default(),
         }
     }
 }
