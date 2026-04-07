@@ -7,6 +7,8 @@ pub struct Config {
     pub station: StationConfig,
     #[serde(default)]
     pub audio: AudioConfig,
+    #[serde(default)]
+    pub radio: RadioConfig,
 }
 
 #[derive(Deserialize, Clone)]
@@ -39,6 +41,23 @@ impl Default for AudioConfig {
     }
 }
 
+#[derive(Deserialize, Clone)]
+pub struct RadioConfig {
+    pub rigctld_host: String,
+    pub rigctld_port: u16,
+    pub poll_interval_ms: u64,
+}
+
+impl Default for RadioConfig {
+    fn default() -> Self {
+        RadioConfig {
+            rigctld_host: "localhost".to_string(),
+            rigctld_port: 4532,
+            poll_interval_ms: 2000,
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
@@ -54,6 +73,7 @@ impl Default for Config {
                 grid: "AA00".to_string(),
             },
             audio: AudioConfig::default(),
+            radio: RadioConfig::default(),
         }
     }
 }

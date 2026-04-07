@@ -7,6 +7,7 @@ mod audio;
 mod config;
 mod dsp;
 mod engine;
+mod radio;
 mod state;
 mod web;
 
@@ -27,6 +28,7 @@ async fn main() -> Result<()> {
 
     let (waterfall_tx, _) = broadcast::channel(32);
     let (decode_tx, _)    = broadcast::channel(16);
+    let (radio_tx, _)     = broadcast::channel(8);
 
     // Shared rolling audio buffer for the FT8 decode engine.
     let decode_buf = Arc::new(Mutex::new(Vec::<f32>::new()));
@@ -39,6 +41,8 @@ async fn main() -> Result<()> {
         config,
         waterfall_tx: waterfall_tx.clone(),
         decode_tx:    decode_tx.clone(),
+        radio_tx:     radio_tx.clone(),
+        rig:          tokio::sync::Mutex::new(None),
     });
 
     // Spawn DSP waterfall task
@@ -46,6 +50,9 @@ async fn main() -> Result<()> {
 
     // Spawn FT8 decode timing engine
     tokio::spawn(engine::timing::run(state.clone(), decode_buf, effective_rate));
+
+    // Spawn radio polling task
+    tokio::spawn(radio::run(state.clone()));
 
     let router = build_router(state);
 

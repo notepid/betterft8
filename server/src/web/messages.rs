@@ -16,6 +16,12 @@ pub enum ServerMessage {
         period:   u64,
         messages: Vec<DecodedMessageJson>,
     },
+    RadioStatus {
+        connected: bool,
+        freq:      u64,
+        mode:      String,
+        ptt:       bool,
+    },
 }
 
 #[derive(Serialize, Clone)]
@@ -31,4 +37,6 @@ pub struct DecodedMessageJson {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMessage {
     Ping {},
+    SetFrequency { freq: u64 },
+    SetMode { mode: String, passband: i32 },
 }

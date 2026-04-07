@@ -19,11 +19,22 @@ export type DecodeMessage = {
   messages: DecodedEntry[]
 }
 
+export type RadioStatusMessage = {
+  type: 'radio_status'
+  connected: boolean
+  freq: number
+  mode: string
+  ptt: boolean
+}
+
 export type ServerMessage =
   | { type: 'echo'; payload: unknown }
   | { type: 'error'; message: string }
   | WaterfallMessage
   | DecodeMessage
+  | RadioStatusMessage
 
 export type ClientMessage =
   | { type: 'ping' }
+  | { type: 'set_frequency'; freq: number }
+  | { type: 'set_mode'; mode: string; passband: number }

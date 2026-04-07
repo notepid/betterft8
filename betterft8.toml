@@ -11,3 +11,8 @@ grid = "AA00"
 [audio]
 # input_device = "My Microphone"  # omit for system default
 sample_rate = 12000
+
+[radio]
+rigctld_host = "localhost"
+rigctld_port = 4532
+poll_interval_ms = 2000

@@ -24,6 +24,7 @@ async fn handle_socket(socket: WebSocket, state: SharedState) {
     let (mut sender, mut receiver) = socket.split();
     let mut waterfall_rx = state.waterfall_tx.subscribe();
     let mut decode_rx    = state.decode_tx.subscribe();
+    let mut radio_rx     = state.radio_tx.subscribe();
 
     loop {
         tokio::select! {
@@ -39,6 +40,22 @@ async fn handle_socket(socket: WebSocket, state: SharedState) {
                                 let json = serde_json::to_string(&reply).unwrap();
                                 if sender.send(Message::Text(json.into())).await.is_err() {
                                     break;
+                                }
+                            }
+                            Ok(ClientMessage::SetFrequency { freq }) => {
+                                let mut guard = state.rig.lock().await;
+                                if let Some(rig) = guard.as_mut() {
+                                    if let Err(e) = rig.set_frequency(freq).await {
+                                        tracing::warn!(conn_id = %conn_id, "set_frequency error: {e}");
+                                    }
+                                }
+                            }
+                            Ok(ClientMessage::SetMode { mode, passband }) => {
+                                let mut guard = state.rig.lock().await;
+                                if let Some(rig) = guard.as_mut() {
+                                    if let Err(e) = rig.set_mode(&mode, passband).await {
+                                        tracing::warn!(conn_id = %conn_id, "set_mode error: {e}");
+                                    }
                                 }
                             }
                             Err(e) => {
@@ -99,6 +116,27 @@ async fn handle_socket(socket: WebSocket, state: SharedState) {
                     }
                     Err(broadcast::error::RecvError::Lagged(n)) => {
                         tracing::warn!(conn_id = %conn_id, "client lagged by {n} decode results");
+                    }
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+
+            status = radio_rx.recv() => {
+                match status {
+                    Ok(status) => {
+                        let msg = ServerMessage::RadioStatus {
+                            connected: status.connected,
+                            freq:      status.freq,
+                            mode:      status.mode,
+                            ptt:       status.ptt,
+                        };
+                        let json = serde_json::to_string(&msg).unwrap();
+                        if sender.send(Message::Text(json.into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                        tracing::warn!(conn_id = %conn_id, "client lagged by {n} radio status updates");
                     }
                     Err(broadcast::error::RecvError::Closed) => break,
                 }

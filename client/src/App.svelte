@@ -4,6 +4,7 @@
   import { connected } from './lib/stores'
   import Waterfall from './components/Waterfall.svelte'
   import DecodeList from './components/DecodeList.svelte'
+  import RadioStatus from './components/RadioStatus.svelte'
 
   onMount(() => {
     client.connect()
@@ -21,6 +22,10 @@
       {$connected ? 'Connected' : 'Disconnected'}
     </span>
   </header>
+
+  <section class="radio-section">
+    <RadioStatus />
+  </section>
 
   <section class="waterfall-section">
     <Waterfall />
@@ -69,6 +74,10 @@
 
   .status.online {
     background: #27ae60;
+  }
+
+  .radio-section {
+    margin-bottom: 0.75rem;
   }
 
   .waterfall-section {
