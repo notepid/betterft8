@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { radioStatus } from '../lib/stores'
+  import { radioStatus, myRole } from '../lib/stores'
   import { client } from '../lib/websocket'
 
   const FT8_BANDS = [
@@ -28,8 +28,10 @@
     return `${whole}.${dec3} ${dec6} MHz`
   }
 
+  $: isOperator = $myRole === 'operator'
+
   function startEdit() {
-    if (!$radioStatus?.connected) return
+    if (!$radioStatus?.connected || !isOperator) return
     editValue = ($radioStatus.freq / 1_000_000).toFixed(6)
     editing = true
   }
@@ -66,7 +68,7 @@
           />
           <span class="freq-unit">MHz</span>
         {:else}
-          <button class="freq-display" onclick={startEdit} title="Click to edit frequency">
+          <button class="freq-display" onclick={startEdit} title={isOperator ? 'Click to edit frequency' : 'Claim operator to change frequency'} class:locked={!isOperator}>
             {formatFreq($radioStatus.freq)}
           </button>
         {/if}
@@ -85,8 +87,8 @@
       <button
         class="band-btn"
         onclick={() => setBand(band.freq)}
-        disabled={!$radioStatus?.connected}
-        title="{band.freq / 1_000_000} MHz"
+        disabled={!$radioStatus?.connected || !isOperator}
+        title={isOperator ? `${band.freq / 1_000_000} MHz` : 'Claim operator to change band'}
       >
         {band.label}
       </button>
@@ -131,6 +133,15 @@
 
   .freq-display:hover {
     color: #a8e0f0;
+  }
+
+  .freq-display.locked {
+    cursor: default;
+    opacity: 0.7;
+  }
+
+  .freq-display.locked:hover {
+    color: #7ec8e3;
   }
 
   .freq-input {

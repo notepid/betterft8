@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
@@ -8,6 +9,7 @@ use crate::config::Config;
 use crate::dsp::ft8::DecodedMessage;
 use crate::engine::qso::QsoState;
 use crate::radio::hamlib::RigCtld;
+use crate::web::session::SessionManager;
 
 // ---- Broadcast payloads -----------------------------------------------------
 
@@ -55,11 +57,20 @@ pub struct QsoUpdate {
 pub struct AppState {
     pub config: Config,
 
+    // ---- Session management -------------------------------------------------
+    pub sessions: SessionManager,
+
     // ---- Broadcast channels -------------------------------------------------
     pub waterfall_tx: broadcast::Sender<WaterfallLine>,
     pub decode_tx:    broadcast::Sender<DecodeResult>,
     pub radio_tx:     broadcast::Sender<RadioStatus>,
     pub qso_tx:       broadcast::Sender<QsoUpdate>,
+
+    // ---- Cached state for initial sync to new clients -----------------------
+    /// Last 5 decode periods; newest at front.
+    pub recent_decodes: Mutex<VecDeque<DecodeResult>>,
+    /// Last known radio status.
+    pub last_radio_status: Mutex<RadioStatus>,
 
     // ---- Radio control ------------------------------------------------------
     pub rig: Mutex<Option<RigCtld>>,

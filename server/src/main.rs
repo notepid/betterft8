@@ -1,4 +1,6 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::VecDeque;
+use std::net::SocketAddr;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
@@ -15,6 +17,7 @@ mod web;
 
 use state::{AppState, QsoUpdate};
 use web::server::build_router;
+use web::session::SessionManager;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -54,16 +57,24 @@ async fn main() -> Result<()> {
             }
         };
 
+    let sessions = SessionManager::new(
+        config.network.operator_password.clone(),
+        config.network.viewer_password.clone(),
+    );
+
     let state = Arc::new(AppState {
         config,
+        sessions,
         waterfall_tx: waterfall_tx.clone(),
         decode_tx:    decode_tx.clone(),
         radio_tx:     radio_tx.clone(),
         qso_tx:       qso_tx.clone(),
+        recent_decodes:    tokio::sync::Mutex::new(VecDeque::new()),
+        last_radio_status: tokio::sync::Mutex::new(state::RadioStatus::default()),
         rig:          tokio::sync::Mutex::new(None),
         tx_queue:     tokio::sync::Mutex::new(None),
         tx_enabled:   AtomicBool::new(false),
-        desired_tx_parity: AtomicBool::new(false), // default: even periods
+        desired_tx_parity: AtomicBool::new(false),
         qso:          tokio::sync::Mutex::new(engine::qso::QsoState::Idle),
         playback,
         tx_sample_rate,
@@ -85,7 +96,10 @@ async fn main() -> Result<()> {
     // Keep audio streams alive until the server exits.
     let _keep_alive = (_in_stream, _out_stream);
 
-    axum::serve(listener, router).await?;
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    ).await?;
 
     Ok(())
 }

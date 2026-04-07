@@ -1,11 +1,18 @@
 import { writable } from 'svelte/store'
-import type { QsoUpdateMessage, RadioStatusMessage, ServerMessage, WaterfallMessage } from './messages'
+import type { OperatorStatusMessage, QsoUpdateMessage, RadioStatusMessage, ServerMessage, WaterfallMessage } from './messages'
 
 export const connected = writable(false)
 export const lastMessage = writable<ServerMessage | null>(null)
 export const waterfallLine = writable<WaterfallMessage | null>(null)
 export const radioStatus = writable<RadioStatusMessage | null>(null)
 export const qsoUpdate = writable<QsoUpdateMessage | null>(null)
+
+export type Role = 'unauthenticated' | 'viewer' | 'operator'
+export const myRole = writable<Role>('unauthenticated')
+export const operatorStatus = writable<OperatorStatusMessage | null>(null)
+export const needsAuth = writable(false)
+/** Last auth-related error message (viewer password or operator claim failure). */
+export const authError = writable<string | null>(null)
 
 export type Decode = {
   period: number

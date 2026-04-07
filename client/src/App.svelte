@@ -1,19 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { client } from './lib/websocket'
-  import { connected, radioStatus, qsoUpdate } from './lib/stores'
+  import { connected } from './lib/stores'
   import Waterfall from './components/Waterfall.svelte'
   import DecodeList from './components/DecodeList.svelte'
   import RadioStatus from './components/RadioStatus.svelte'
   import Controls from './components/Controls.svelte'
   import QsoPanel from './components/QsoPanel.svelte'
+  import Login from './components/Login.svelte'
 
   // TX frequency shared between Controls and QsoPanel
   let txFreq = 1000
-
-  $: myCallsign = ($radioStatus?.connected
-    ? undefined
-    : undefined) ?? '' // populated below from config if needed
 
   onMount(() => {
     client.connect()
@@ -30,6 +27,12 @@
     <span class="status" class:online={$connected} title={$connected ? 'Connected' : 'Disconnected'}>
       {$connected ? 'Connected' : 'Disconnected'}
     </span>
+    <!--
+      Login renders two things:
+      1. A fixed auth overlay when viewer password is required ($needsAuth)
+      2. An inline session bar (role badge + operator controls) here in the header
+    -->
+    <Login />
   </header>
 
   <section class="radio-section">
@@ -73,6 +76,7 @@
     align-items: center;
     gap: 1rem;
     margin-bottom: 1rem;
+    flex-wrap: wrap;
   }
 
   h1 {

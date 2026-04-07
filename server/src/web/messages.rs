@@ -6,6 +6,16 @@ use serde::{Deserialize, Serialize};
 pub enum ServerMessage {
     Echo { payload: serde_json::Value },
     Error { message: String },
+    /// First message sent to every client on connect.
+    Hello { needs_viewer_auth: bool },
+    /// Response to `Auth` (viewer) or indicates auth state.
+    AuthResult { success: bool },
+    /// Broadcast whenever operator lock changes; personalised per-client.
+    OperatorStatus {
+        operator_client_id: Option<String>,
+        you_are_operator: bool,
+        client_count: usize,
+    },
     Waterfall {
         timestamp: f64,
         freq_min:  u32,
@@ -46,13 +56,19 @@ pub struct DecodedMessageJson {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMessage {
     Ping {},
+    /// Viewer password authentication (only required if `needs_viewer_auth` was true).
+    Auth { password: String },
+    /// Claim the operator lock.
+    ClaimOperator { password: String },
+    /// Release the operator lock.
+    ReleaseOperator {},
+
     SetFrequency { freq: u64 },
     SetMode { mode: String, passband: i32 },
 
     /// Begin calling CQ on `freq` Hz (audio frequency within passband).
     CallCq { freq: f32 },
     /// Respond to a decoded CQ from `their_call` at `their_freq`.
-    /// `tx_freq` is our chosen audio TX frequency.
     RespondTo { their_call: String, their_freq: f32, tx_freq: f32 },
     /// Manually queue a custom FT8 message.
     QueueTx { message: String, freq: f32 },

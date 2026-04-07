@@ -96,7 +96,16 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
                 .unwrap_or_default();
 
         tracing::info!("FT8 decoded {} message(s) for period {}", decoded.len(), period);
-        let _ = state.decode_tx.send(DecodeResult { period, messages: decoded.clone() });
+        let result = DecodeResult { period, messages: decoded.clone() };
+        let _ = state.decode_tx.send(result.clone());
+        // Cache for initial state sync to newly connected clients
+        {
+            let mut cache = state.recent_decodes.lock().await;
+            cache.push_front(result);
+            if cache.len() > 5 {
+                cache.pop_back();
+            }
+        }
 
         // ---- Advance QSO state machine --------------------------------------
         if state.tx_enabled.load(Ordering::Relaxed) {

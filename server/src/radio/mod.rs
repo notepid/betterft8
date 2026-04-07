@@ -37,6 +37,7 @@ pub async fn run(state: Arc<AppState>) {
 
                     match poll_result {
                         Ok(status) => {
+                            *state.last_radio_status.lock().await = status.clone();
                             let _ = state.radio_tx.send(status);
                         }
                         Err(e) => {

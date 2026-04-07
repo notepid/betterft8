@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { radioStatus, qsoUpdate } from '../lib/stores'
+  import { radioStatus, qsoUpdate, myRole } from '../lib/stores'
   import { client } from '../lib/websocket'
 
   // TX frequency (audio Hz within passband)
@@ -8,6 +8,7 @@
   $: txEnabled = $qsoUpdate?.tx_enabled ?? false
   $: transmitting = $radioStatus?.ptt ?? false
   $: txQueued = $qsoUpdate?.tx_queued ?? false
+  $: isOperator = $myRole === 'operator'
 
   // Parity: false = even (0,30s), true = odd (15,45s)
   let parityOdd = false
@@ -38,8 +39,8 @@
 
 <div class="controls">
   <!-- TX Enable toggle -->
-  <label class="toggle-label" title="Enable/disable automatic TX">
-    <input type="checkbox" checked={txEnabled} onchange={toggleTx} />
+  <label class="toggle-label" title={isOperator ? 'Enable/disable automatic TX' : 'Claim operator to control TX'}>
+    <input type="checkbox" checked={txEnabled} onchange={toggleTx} disabled={!isOperator} />
     <span class="toggle-text">TX {txEnabled ? 'ON' : 'OFF'}</span>
   </label>
 
@@ -53,6 +54,7 @@
       max="2700"
       step="10"
       bind:value={txFreq}
+      disabled={!isOperator}
     />
   </label>
 
@@ -62,11 +64,13 @@
       class="parity-btn"
       class:active={!parityOdd}
       onclick={() => setParity(false)}
+      disabled={!isOperator}
     >Even</button>
     <button
       class="parity-btn"
       class:active={parityOdd}
       onclick={() => setParity(true)}
+      disabled={!isOperator}
     >Odd</button>
   </div>
 
@@ -74,22 +78,24 @@
   <button
     class="btn btn-cq"
     onclick={callCq}
-    disabled={transmitting}
-    title="Call CQ on TX frequency"
+    disabled={transmitting || !isOperator}
+    title={isOperator ? 'Call CQ on TX frequency' : 'Claim operator to control TX'}
   >Call CQ</button>
 
-  <!-- Halt TX — always available -->
+  <!-- Halt TX -->
   <button
     class="btn btn-halt"
     onclick={haltTx}
-    title="Emergency stop TX"
+    disabled={!isOperator}
+    title={isOperator ? 'Emergency stop TX' : 'Claim operator to control TX'}
   >Halt TX</button>
 
   <!-- Reset QSO -->
   <button
     class="btn btn-reset"
     onclick={resetQso}
-    title="Clear QSO state and stop TX"
+    disabled={!isOperator}
+    title={isOperator ? 'Clear QSO state and stop TX' : 'Claim operator to control TX'}
   >Reset</button>
 
   <!-- TX status badge -->

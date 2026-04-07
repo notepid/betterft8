@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { qsoUpdate, selectedDecode } from '../lib/stores'
+  import { qsoUpdate, selectedDecode, myRole } from '../lib/stores'
   import { client } from '../lib/websocket'
   import type { QsoStateValue } from '../lib/messages'
 
@@ -55,8 +55,10 @@
   }
 
   // Respond button: visible when selectedDecode is a CQ
+  $: isOperator = $myRole === 'operator'
   $: selected = $selectedDecode
-  $: canRespond = selected !== null
+  $: canRespond = isOperator
+    && selected !== null
     && (selected.message.toUpperCase().startsWith('CQ '))
     && qsoState.state === 'idle'
 
@@ -155,7 +157,7 @@
     </div>
   {/if}
 
-  <!-- Next TX message (editable) -->
+  <!-- Next TX message (editable by operator only) -->
   {#if nextTx !== null && txEnabled}
     <div class="next-tx-row">
       <span class="next-tx-label">Next TX:</span>
@@ -164,7 +166,8 @@
         bind:value={editedNextTx}
         onblur={queueEdited}
         onkeydown={(e) => { if (e.key === 'Enter') queueEdited() }}
-        title="Edit message before it fires (press Enter to confirm)"
+        disabled={!isOperator}
+        title={isOperator ? 'Edit message before it fires (press Enter to confirm)' : 'Claim operator to edit'}
       />
     </div>
   {/if}
