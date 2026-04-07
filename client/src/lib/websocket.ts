@@ -1,5 +1,5 @@
 import type { ClientMessage, ServerMessage } from './messages'
-import { connected, lastMessage, waterfallLine, addDecodes, radioStatus } from './stores'
+import { connected, lastMessage, waterfallLine, addDecodes, radioStatus, qsoUpdate } from './stores'
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`
 
@@ -38,6 +38,8 @@ class BetterFT8Client {
           addDecodes(msg.period, msg.messages)
         } else if (msg.type === 'radio_status') {
           radioStatus.set(msg)
+        } else if (msg.type === 'qso_update') {
+          qsoUpdate.set(msg)
         } else {
           lastMessage.set(msg)
         }

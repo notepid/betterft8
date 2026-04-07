@@ -27,14 +27,44 @@ export type RadioStatusMessage = {
   ptt: boolean
 }
 
+export type QsoStateValue =
+  | { state: 'idle' }
+  | { state: 'calling_cq'; my_call: string; my_grid: string; tx_freq: number }
+  | {
+      state: 'in_qso'
+      their_call: string
+      their_grid: string | null
+      their_report: number | null
+      my_report: number | null
+      step: 'sent_grid' | 'sent_report' | 'sent_roger_report' | 'sent_rr73' | 'sent_73'
+      tx_freq: number
+    }
+  | { state: 'complete'; their_call: string; their_report: number | null; my_report: number | null }
+
+export type QsoUpdateMessage = {
+  type: 'qso_update'
+  state: QsoStateValue
+  next_tx: string | null
+  tx_enabled: boolean
+  tx_queued: boolean
+}
+
 export type ServerMessage =
   | { type: 'echo'; payload: unknown }
   | { type: 'error'; message: string }
   | WaterfallMessage
   | DecodeMessage
   | RadioStatusMessage
+  | QsoUpdateMessage
 
 export type ClientMessage =
   | { type: 'ping' }
   | { type: 'set_frequency'; freq: number }
   | { type: 'set_mode'; mode: string; passband: number }
+  | { type: 'call_cq'; freq: number }
+  | { type: 'respond_to'; their_call: string; their_freq: number; tx_freq: number }
+  | { type: 'queue_tx'; message: string; freq: number }
+  | { type: 'halt_tx' }
+  | { type: 'enable_tx'; enabled: boolean }
+  | { type: 'set_tx_parity'; parity: number }
+  | { type: 'reset_qso' }

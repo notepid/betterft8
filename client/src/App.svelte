@@ -1,10 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { client } from './lib/websocket'
-  import { connected } from './lib/stores'
+  import { connected, radioStatus, qsoUpdate } from './lib/stores'
   import Waterfall from './components/Waterfall.svelte'
   import DecodeList from './components/DecodeList.svelte'
   import RadioStatus from './components/RadioStatus.svelte'
+  import Controls from './components/Controls.svelte'
+  import QsoPanel from './components/QsoPanel.svelte'
+
+  // TX frequency shared between Controls and QsoPanel
+  let txFreq = 1000
+
+  $: myCallsign = ($radioStatus?.connected
+    ? undefined
+    : undefined) ?? '' // populated below from config if needed
 
   onMount(() => {
     client.connect()
@@ -25,6 +34,14 @@
 
   <section class="radio-section">
     <RadioStatus />
+  </section>
+
+  <section class="controls-section">
+    <Controls bind:txFreq />
+  </section>
+
+  <section class="qso-section">
+    <QsoPanel bind:txFreq />
   </section>
 
   <section class="waterfall-section">
@@ -77,6 +94,14 @@
   }
 
   .radio-section {
+    margin-bottom: 0.5rem;
+  }
+
+  .controls-section {
+    margin-bottom: 0.5rem;
+  }
+
+  .qso-section {
     margin-bottom: 0.75rem;
   }
 

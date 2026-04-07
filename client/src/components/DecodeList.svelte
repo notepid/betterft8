@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { decodes, type Decode } from '../lib/stores'
+  import { decodes, selectedDecode, type Decode } from '../lib/stores'
 
   export let myCallsign: string = ''
 
@@ -11,8 +11,7 @@
   }
 
   function handleClick(d: Decode) {
-    const event = new CustomEvent('select-decode', { detail: d, bubbles: true })
-    document.dispatchEvent(event)
+    selectedDecode.set(d)
   }
 </script>
 
@@ -31,7 +30,11 @@
       {#each $decodes as d (d.period + '-' + d.freq.toFixed(0) + '-' + d.message)}
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-        <tr class={rowClass(d)} on:click={() => handleClick(d)}>
+        <tr
+          class={rowClass(d)}
+          class:selected={$selectedDecode?.period === d.period && $selectedDecode?.freq === d.freq && $selectedDecode?.message === d.message}
+          on:click={() => handleClick(d)}
+        >
           <td class="col-utc">{d.utcTime}</td>
           <td class="col-snr">{d.snr > 0 ? '+' : ''}{d.snr}</td>
           <td class="col-dt">{d.dt >= 0 ? '+' : ''}{d.dt.toFixed(1)}</td>
@@ -93,6 +96,11 @@
 
   tr:hover {
     background: #1e1e3a;
+  }
+
+  tr.selected {
+    background: #1a2a3a;
+    outline: 1px solid #3a5a8a;
   }
 
   .row-cq {

@@ -32,6 +32,25 @@ int ft8_decode_audio(
     int            max_results
 );
 
+/**
+ * Encode an FT8 message string as audio samples using GFSK modulation.
+ *
+ * @param message_text  Null-terminated FT8 message (e.g. "CQ N0CALL AA00")
+ * @param frequency     Base audio frequency in Hz (e.g. 1000.0)
+ * @param sample_rate   Output sample rate in Hz (e.g. 12000 or 48000)
+ * @param output        Pre-allocated output buffer for f32 audio samples
+ * @param max_samples   Capacity of the output buffer
+ * @return              Number of samples written (= FT8_NN * round(sample_rate * 0.160)),
+ *                      or -1 on encoding error or buffer too small
+ */
+int ft8_encode_audio(
+    const char* message_text,
+    float       frequency,
+    int         sample_rate,
+    float*      output,
+    int         max_samples
+);
+
 #ifdef __cplusplus
 }
 #endif
