@@ -1,9 +1,6 @@
 <script lang="ts">
-  import { radioStatus, qsoUpdate, myRole } from '../lib/stores'
+  import { radioStatus, qsoUpdate, myRole, txFreq } from '../lib/stores'
   import { client } from '../lib/websocket'
-
-  // TX frequency (audio Hz within passband)
-  let txFreq = 1000
 
   $: txEnabled = $qsoUpdate?.tx_enabled ?? false
   $: transmitting = $radioStatus?.ptt ?? false
@@ -20,7 +17,7 @@
 
   function callCq() {
     client.send({ type: 'enable_tx', enabled: true })
-    client.send({ type: 'call_cq', freq: txFreq })
+    client.send({ type: 'call_cq', freq: $txFreq })
   }
 
   function haltTx() {
@@ -53,7 +50,7 @@
       min="200"
       max="2700"
       step="10"
-      bind:value={txFreq}
+      bind:value={$txFreq}
       disabled={!isOperator}
     />
   </label>

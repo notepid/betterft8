@@ -70,6 +70,9 @@ export const waterfallFloor = writable<number>(-120)
 /** Waterfall display ceiling in dB (-120 to 0). Values above this → full color. */
 export const waterfallCeiling = writable<number>(0)
 
+/** TX audio frequency in Hz (200–2700). Shared between Controls, QsoPanel, and Waterfall. */
+export const txFreq = writable<number>(1000)
+
 /** Available audio devices from server. */
 export const deviceList = writable<{ inputs: string[]; outputs: string[] }>({ inputs: [], outputs: [] })
 

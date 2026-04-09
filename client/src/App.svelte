@@ -11,9 +11,6 @@
   import Settings from './components/Settings.svelte'
   import SetupWizard from './components/SetupWizard.svelte'
 
-  // TX frequency shared between Controls and QsoPanel
-  let txFreq = 1000
-
   onMount(() => {
     client.connect()
     const interval = setInterval(() => {
@@ -44,11 +41,11 @@
   </section>
 
   <section class="controls-section">
-    <Controls bind:txFreq />
+    <Controls />
   </section>
 
   <section class="qso-section">
-    <QsoPanel bind:txFreq />
+    <QsoPanel />
   </section>
 
   <section class="waterfall-section">

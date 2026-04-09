@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
-  import { decodes, selectedDecode, waterfallLine, waterfallScheme, waterfallFloor, waterfallCeiling } from '../lib/stores'
+  import { decodes, selectedDecode, waterfallLine, waterfallScheme, waterfallFloor, waterfallCeiling, txFreq } from '../lib/stores'
   import type { Decode } from '../lib/stores'
   import type { WaterfallMessage } from '../lib/messages'
 
@@ -116,6 +116,7 @@
     ctx.putImageData(imageData, 0, 0)
     drawFreqAxis(ctx, msg.freq_max, w)
     drawDecodeOverlay(ctx, w, msg.freq_max)
+    drawTxFreqIndicator(ctx, w, h, msg.freq_max)
   }
 
   function drawFreqAxis(ctx: CanvasRenderingContext2D, freqMax: number, w: number) {
@@ -168,8 +169,39 @@
     ctx.restore()
   }
 
+  function drawTxFreqIndicator(ctx: CanvasRenderingContext2D, w: number, h: number, freqMax: number) {
+    const freq = get(txFreq)
+    if (freq <= 0 || freq > freqMax) return
+    const x = Math.round((freq / freqMax) * w)
+
+    // Semitransparent band (~50 Hz wide = FT8 signal bandwidth)
+    const halfBandPx = Math.max(1, Math.round((25 / freqMax) * w))
+    ctx.save()
+    ctx.fillStyle = 'rgba(255, 80, 60, 0.12)'
+    ctx.fillRect(x - halfBandPx, 0, halfBandPx * 2, h)
+
+    // Dashed center line
+    ctx.strokeStyle = 'rgba(255, 100, 80, 0.85)'
+    ctx.lineWidth = 1
+    ctx.setLineDash([5, 4])
+    ctx.beginPath()
+    ctx.moveTo(x + 0.5, 0)
+    ctx.lineTo(x + 0.5, h)
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    // Label at bottom
+    ctx.font = '10px monospace'
+    ctx.fillStyle = 'rgba(255, 140, 120, 0.95)'
+    const label = `TX:${freq}`
+    const textW = ctx.measureText(label).width
+    const labelX = Math.min(x + 3, w - textW - 2)
+    ctx.fillText(label, labelX, h - 4)
+    ctx.restore()
+  }
+
   function handleCanvasClick(event: MouseEvent) {
-    if (!canvas || overlayDecodes.length === 0) return
+    if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const x = (event.clientX - rect.left) * (canvas.width / rect.width)
     const clickedFreq = (x / canvas.width) * currentFreqMax
@@ -191,6 +223,10 @@
         (d: Decode) => d.period === nearest!.period && Math.abs(d.freq - nearest!.freq) < 1
       )
       if (found) selectedDecode.set(found)
+    } else {
+      // Set TX frequency to clicked position (rounded to 10 Hz, clamped to valid range)
+      const snapped = Math.max(200, Math.min(2700, Math.round(clickedFreq / 10) * 10))
+      txFreq.set(snapped)
     }
   }
 

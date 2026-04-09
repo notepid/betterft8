@@ -1,10 +1,7 @@
 <script lang="ts">
-  import { qsoUpdate, selectedDecode, myRole } from '../lib/stores'
+  import { qsoUpdate, selectedDecode, myRole, txFreq } from '../lib/stores'
   import { client } from '../lib/websocket'
   import type { QsoStateValue } from '../lib/messages'
-
-  // TX frequency to use when responding (populated from Controls or waterfall click)
-  export let txFreq: number = 1000
 
   $: update = $qsoUpdate
   $: qsoState = update?.state ?? ({ state: 'idle' } as QsoStateValue)
@@ -70,14 +67,14 @@
       type:       'respond_to',
       their_call: theirCall,
       their_freq: selected.freq,
-      tx_freq:    txFreq,
+      tx_freq:    $txFreq,
     })
     selectedDecode.set(null)
   }
 
   function queueEdited() {
     if (editedNextTx) {
-      client.send({ type: 'queue_tx', message: editedNextTx, freq: txFreq })
+      client.send({ type: 'queue_tx', message: editedNextTx, freq: $txFreq })
     }
   }
 </script>
