@@ -33,6 +33,9 @@ jobs:
   windows:
     needs: client
     runs-on: [self-hosted, Windows]
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -47,14 +50,13 @@ jobs:
         working-directory: server
         run: cargo build --release
       - name: Package
-        shell: bash
         run: |
-          mkdir -p release
-          cp server/target/release/betterft8-server.exe release/
-          cp server/hamlib-lib/libhamlib-4.dll release/
-          cp server/hamlib-lib/libgcc_s_seh-1.dll release/
-          cp server/hamlib-lib/libusb-1.0.dll release/
-          cp server/hamlib-lib/libwinpthread-1.dll release/
+          New-Item -ItemType Directory -Force release
+          Copy-Item server/target/release/betterft8-server.exe release/
+          Copy-Item server/hamlib-lib/libhamlib-4.dll release/
+          Copy-Item server/hamlib-lib/libgcc_s_seh-1.dll release/
+          Copy-Item server/hamlib-lib/libusb-1.0.dll release/
+          Copy-Item server/hamlib-lib/libwinpthread-1.dll release/
       - uses: actions/upload-artifact@v4
         with:
           name: betterft8-windows-x64
@@ -64,6 +66,9 @@ jobs:
   windows-rigctld:
     needs: client
     runs-on: [self-hosted, Windows]
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -78,10 +83,9 @@ jobs:
         working-directory: server
         run: cargo build --release --no-default-features
       - name: Package
-        shell: bash
         run: |
-          mkdir -p release
-          cp server/target/release/betterft8-server.exe release/
+          New-Item -ItemType Directory -Force release
+          Copy-Item server/target/release/betterft8-server.exe release/
       - uses: actions/upload-artifact@v4
         with:
           name: betterft8-windows-x64-rigctld
