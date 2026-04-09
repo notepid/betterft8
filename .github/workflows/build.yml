@@ -12,7 +12,7 @@ env:
 jobs:
   # Build the Svelte client (shared across all platform builds)
   client:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -96,7 +96,7 @@ jobs:
   # Linux x64 — with Hamlib (requires libhamlib4 at runtime)
   linux:
     needs: client
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -124,7 +124,7 @@ jobs:
   # Linux x64 — rigctld only (no Hamlib dependency)
   linux-rigctld:
     needs: client
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -152,7 +152,7 @@ jobs:
   # Raspberry Pi aarch64 — with Hamlib (requires libhamlib4 at runtime)
   raspberry-pi:
     needs: client
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -179,7 +179,7 @@ jobs:
   # Raspberry Pi aarch64 — rigctld only (no Hamlib dependency)
   raspberry-pi-rigctld:
     needs: client
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
