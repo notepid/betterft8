@@ -160,8 +160,7 @@ jobs:
       - name: Install cross
         run: cargo install cross --git https://github.com/cross-rs/cross
       - name: Build
-        working-directory: server
-        run: cross build --release --target aarch64-unknown-linux-gnu
+        run: cross build --release --target aarch64-unknown-linux-gnu --manifest-path server/Cargo.toml
       - name: Package
         run: |
           mkdir -p release
@@ -188,8 +187,7 @@ jobs:
       - name: Install cross
         run: cargo install cross --git https://github.com/cross-rs/cross
       - name: Build
-        working-directory: server
-        run: cross build --release --no-default-features --target aarch64-unknown-linux-gnu
+        run: cross build --release --no-default-features --target aarch64-unknown-linux-gnu --manifest-path server/Cargo.toml
       - name: Package
         run: |
           mkdir -p release
