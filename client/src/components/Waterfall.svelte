@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
-  import { decodes, selectedDecode, waterfallLine, waterfallScheme, waterfallFloor, waterfallCeiling, txFreq } from '../lib/stores'
+  import { decodes, selectedDecode, waterfallLine, waterfallScheme, waterfallFloor, waterfallCeiling, waterfallAutoLevel, txFreq } from '../lib/stores'
   import type { Decode } from '../lib/stores'
   import type { WaterfallMessage } from '../lib/messages'
 
@@ -31,6 +31,66 @@
     return lut
   }
 
+  // Auto-level: estimate noise floor from incoming data and set floor/ceiling.
+  // Uses exponential smoothing so the display adapts gradually.
+  let smoothFloor = 0
+  let smoothCeiling = 255
+  let autoLevelInitialized = false
+
+  function autoLevel(srcArr: Uint8Array) {
+    if (!$waterfallAutoLevel) return
+
+    // Build a simple histogram
+    const hist = new Uint32Array(256)
+    for (let i = 0; i < srcArr.length; i++) {
+      hist[srcArr[i]]++
+    }
+
+    // Find the noise floor: the peak of the histogram (most common value)
+    let peakBin = 0
+    let peakCount = 0
+    for (let i = 0; i < 256; i++) {
+      if (hist[i] > peakCount) {
+        peakCount = hist[i]
+        peakBin = i
+      }
+    }
+
+    // Find P95 of the distribution (signal level estimate)
+    const total = srcArr.length
+    let cumulative = 0
+    let p95Bin = 255
+    for (let i = 0; i < 256; i++) {
+      cumulative += hist[i]
+      if (cumulative >= total * 0.97) {
+        p95Bin = i
+        break
+      }
+    }
+
+    // Target: floor just below noise peak, ceiling a bit above the 97th percentile
+    const targetFloor = Math.max(0, peakBin - 8)
+    const targetCeiling = Math.min(255, Math.max(p95Bin + 15, targetFloor + 40))
+
+    // Exponential smoothing (slow adaptation)
+    const alpha = autoLevelInitialized ? 0.05 : 1.0
+    smoothFloor = smoothFloor + alpha * (targetFloor - smoothFloor)
+    smoothCeiling = smoothCeiling + alpha * (targetCeiling - smoothCeiling)
+    autoLevelInitialized = true
+
+    // Convert u8 back to dB for the store
+    const floorDb = Math.round((smoothFloor / 255) * 120 - 120)
+    const ceilingDb = Math.round((smoothCeiling / 255) * 120 - 120)
+
+    waterfallFloor.set(Math.max(-120, Math.min(-1, floorDb)))
+    waterfallCeiling.set(Math.max(-119, Math.min(0, ceilingDb)))
+  }
+
+  // Reset smoothing when auto-level is toggled on
+  $: if ($waterfallAutoLevel) {
+    autoLevelInitialized = false
+  }
+
   function buildColorLut(scheme: string): Uint8ClampedArray {
     const lut = new Uint8ClampedArray(256 * 4)
     for (let i = 0; i < 256; i++) {
@@ -52,24 +112,35 @@
       if (v < 170) return [255, Math.round(((v - 85) / 85) * 255), 0]
       return [255, 255, Math.round(((v - 170) / 85) * 255)]
     }
-    // Classic (default)
-    if (v < 50) {
-      return [0, 0, Math.round((v / 50) * 128)]
-    } else if (v < 100) {
-      const t = (v - 50) / 50
-      return [0, 0, Math.round(128 + t * 127)]
-    } else if (v < 150) {
-      const t = (v - 100) / 50
-      return [0, Math.round(t * 255), 255]
-    } else if (v < 200) {
-      const t = (v - 150) / 50
-      return [Math.round(t * 255), 255, Math.round(255 * (1 - t))]
-    } else if (v < 230) {
-      const t = (v - 200) / 30
+    // Classic (default) — dark background with good signal contrast
+    if (v < 20) {
+      // Near-black for the noise floor
+      const t = v / 20
+      return [0, 0, Math.round(t * 40)]
+    } else if (v < 60) {
+      // Dark blue rising
+      const t = (v - 20) / 40
+      return [0, 0, Math.round(40 + t * 180)]
+    } else if (v < 110) {
+      // Blue to cyan
+      const t = (v - 60) / 50
+      return [0, Math.round(t * 255), Math.round(220 + t * 35)]
+    } else if (v < 160) {
+      // Cyan to green
+      const t = (v - 110) / 50
+      return [0, 255, Math.round(255 * (1 - t))]
+    } else if (v < 210) {
+      // Green to yellow
+      const t = (v - 160) / 50
+      return [Math.round(t * 255), 255, 0]
+    } else if (v < 240) {
+      // Yellow to red
+      const t = (v - 210) / 30
       return [255, Math.round(255 * (1 - t)), 0]
     } else {
-      const t = Math.min((v - 230) / 25, 1)
-      return [255, Math.round(t * 255), Math.round(t * 255)]
+      // Red to white (very strong signals)
+      const t = Math.min((v - 240) / 15, 1)
+      return [255, Math.round(t * 200), Math.round(t * 200)]
     }
   }
 
@@ -97,6 +168,9 @@
       srcArr[i] = binaryStr.charCodeAt(i)
     }
     const numBins = srcArr.length
+
+    // Auto-level: adapt floor/ceiling from signal statistics
+    autoLevel(srcArr)
 
     // Scroll existing rows down by one row
     imageData.data.copyWithin(w * 4, 0)
@@ -170,33 +244,42 @@
   }
 
   function drawTxFreqIndicator(ctx: CanvasRenderingContext2D, w: number, h: number, freqMax: number) {
-    const freq = get(txFreq)
-    if (freq <= 0 || freq > freqMax) return
-    const x = Math.round((freq / freqMax) * w)
+    const freqLo = get(txFreq)
+    if (freqLo <= 0 || freqLo > freqMax) return
+    const freqHi = freqLo + 50 // FT8 signal bandwidth ~50 Hz
+    const xLo = Math.round((freqLo / freqMax) * w)
+    const xHi = Math.round((freqHi / freqMax) * w)
+    const bandW = Math.max(2, xHi - xLo)
 
-    // Semitransparent band (~50 Hz wide = FT8 signal bandwidth)
-    const halfBandPx = Math.max(1, Math.round((25 / freqMax) * w))
     ctx.save()
-    ctx.fillStyle = 'rgba(255, 80, 60, 0.12)'
-    ctx.fillRect(x - halfBandPx, 0, halfBandPx * 2, h)
 
-    // Dashed center line
-    ctx.strokeStyle = 'rgba(255, 100, 80, 0.85)'
-    ctx.lineWidth = 1
-    ctx.setLineDash([5, 4])
+    // Semitransparent band fill — bright magenta for visibility
+    ctx.fillStyle = 'rgba(255, 0, 200, 0.18)'
+    ctx.fillRect(xLo, 0, bandW, h)
+
+    // Solid edge lines (thick for visibility)
+    ctx.strokeStyle = 'rgba(255, 50, 220, 0.9)'
+    ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.moveTo(x + 0.5, 0)
-    ctx.lineTo(x + 0.5, h)
+    ctx.moveTo(xLo + 0.5, 0)
+    ctx.lineTo(xLo + 0.5, h)
     ctx.stroke()
-    ctx.setLineDash([])
+    ctx.beginPath()
+    ctx.moveTo(xHi + 0.5, 0)
+    ctx.lineTo(xHi + 0.5, h)
+    ctx.stroke()
 
-    // Label at bottom
+    // Labels at bottom showing lower and upper frequencies
     ctx.font = '10px monospace'
-    ctx.fillStyle = 'rgba(255, 140, 120, 0.95)'
-    const label = `TX:${freq}`
-    const textW = ctx.measureText(label).width
-    const labelX = Math.min(x + 3, w - textW - 2)
-    ctx.fillText(label, labelX, h - 4)
+    ctx.fillStyle = 'rgba(255, 120, 240, 0.95)'
+    const loLabel = `${freqLo}`
+    const hiLabel = `${freqHi}`
+    const loTextW = ctx.measureText(loLabel).width
+    const hiTextW = ctx.measureText(hiLabel).width
+    // Lower freq label to the left of the lower edge
+    ctx.fillText(loLabel, Math.max(2, xLo - loTextW - 2), h - 4)
+    // Upper freq label to the right of the upper edge
+    ctx.fillText(hiLabel, Math.min(xHi + 3, w - hiTextW - 2), h - 4)
     ctx.restore()
   }
 
@@ -206,9 +289,9 @@
     const x = (event.clientX - rect.left) * (canvas.width / rect.width)
     const clickedFreq = (x / canvas.width) * currentFreqMax
 
-    // Find nearest decode within 60 Hz tolerance
+    // Find nearest decode within 25 Hz tolerance (FT8 signal is ~50 Hz wide)
     let nearest: (typeof overlayDecodes)[0] | null = null
-    let minDist = 60
+    let minDist = 25
     for (const d of overlayDecodes) {
       const dist = Math.abs(d.freq - clickedFreq)
       if (dist < minDist) {
@@ -225,7 +308,7 @@
       if (found) selectedDecode.set(found)
     } else {
       // Set TX frequency to clicked position (rounded to 10 Hz, clamped to valid range)
-      const snapped = Math.max(200, Math.min(2700, Math.round(clickedFreq / 10) * 10))
+      const snapped = Math.max(200, Math.min(3000, Math.round(clickedFreq / 10) * 10))
       txFreq.set(snapped)
     }
   }

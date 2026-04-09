@@ -164,3 +164,4 @@ server/hamlib-lib/*.a
 server/hamlib-lib/*.dll
 server/hamlib-lib/*.exp
 server/hamlib-lib/include/
+server/betterft8.toml

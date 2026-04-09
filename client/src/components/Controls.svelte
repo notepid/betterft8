@@ -48,7 +48,7 @@
       class="tx-freq-input"
       type="number"
       min="200"
-      max="2700"
+      max="3000"
       step="10"
       bind:value={$txFreq}
       disabled={!isOperator}

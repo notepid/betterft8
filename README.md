@@ -26,6 +26,13 @@ The server (`server/`, Rust + Axum) handles all hardware: audio capture, FT8 dec
 - [Hamlib](https://github.com/Hamlib/Hamlib/releases) `rigctld` (for radio control)
 - A C compiler (MSVC on Windows, gcc/clang on Linux/macOS)
 
+## Dev setup
+
+cd client && npm run dev
+cd server && cargo watch -x "run --"
+
+
+
 ## Quick Start
 
 **1. Build the client**

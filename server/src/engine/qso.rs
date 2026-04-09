@@ -88,6 +88,11 @@ pub fn seventy_three_msg(their_call: &str, my_call: &str) -> String {
 
 // ---- Message parsing helpers ------------------------------------------------
 
+/// Strip angle brackets from hashed callsigns (e.g. `<W1AW>` → `W1AW`).
+fn strip_hash(s: &str) -> &str {
+    s.strip_prefix('<').and_then(|s| s.strip_suffix('>')).unwrap_or(s)
+}
+
 fn is_grid(s: &str) -> bool {
     let b = s.as_bytes();
     b.len() >= 4
@@ -136,18 +141,23 @@ pub fn advance(
             let my_grid = my_grid.clone();
             let tx_freq = *tx_freq;
 
-            // Look for a response: "{MY_CALL} {THEIR_CALL} {THEIR_GRID}"
+            // Look for a response: "{MY_CALL} {THEIR_CALL} {THEIR_GRID|REPORT}"
             for msg in decoded {
                 let w: Vec<&str> = msg.message.split_whitespace().collect();
-                if w.len() >= 3
-                    && w[0].eq_ignore_ascii_case(&mc)
-                    && is_grid(w[2])
-                    && !w[1].eq_ignore_ascii_case(&mc)
+                if w.len() < 3
+                    || !strip_hash(w[0]).eq_ignore_ascii_case(&mc)
+                    || strip_hash(w[1]).eq_ignore_ascii_case(&mc)
                 {
-                    let their_call = w[1].to_uppercase();
+                    continue;
+                }
+
+                let their_call = strip_hash(w[1]).to_uppercase();
+                let snr = msg.snr.clamp(-24, 99);
+
+                if is_grid(w[2]) {
+                    // Standard response with grid — send our signal report
                     let their_grid = w[2].to_uppercase();
-                    let snr        = msg.snr.clamp(-24, 99);
-                    let next_msg   = report_msg(&their_call, my_call, snr);
+                    let next_msg = report_msg(&their_call, my_call, snr);
 
                     tracing::info!("QSO: {} responded (grid {}), sending report", their_call, their_grid);
 
@@ -158,6 +168,24 @@ pub fn advance(
                         my_report:    Some(snr),
                         my_grid:      None,
                         step:         QsoStep::SentReport,
+                        tx_freq,
+                    };
+                    return Some(next_msg);
+                } else if is_plain_report(w[2]) {
+                    // They replied with a signal report directly (no grid) —
+                    // send R-report to acknowledge their report
+                    let their_snr = parse_snr(w[2]).unwrap_or(0);
+                    let next_msg = roger_report_msg(&their_call, my_call, snr);
+
+                    tracing::info!("QSO: {} responded with report {}, sending R-report", their_call, their_snr);
+
+                    *state = QsoState::InQso {
+                        their_call,
+                        their_grid:   None,
+                        their_report: Some(their_snr),
+                        my_report:    Some(snr),
+                        my_grid:      None,
+                        step:         QsoStep::SentRogerReport,
                         tx_freq,
                     };
                     return Some(next_msg);
@@ -182,11 +210,14 @@ pub fn advance(
                 QsoStep::SentGrid => {
                     for msg in decoded {
                         let w: Vec<&str> = msg.message.split_whitespace().collect();
-                        if w.len() >= 3
-                            && w[0].eq_ignore_ascii_case(my_call)
-                            && w[1].eq_ignore_ascii_case(&tc)
-                            && is_plain_report(w[2])
+                        if w.len() < 3
+                            || !strip_hash(w[0]).eq_ignore_ascii_case(my_call)
+                            || !strip_hash(w[1]).eq_ignore_ascii_case(&tc)
                         {
+                            continue;
+                        }
+
+                        if is_plain_report(w[2]) {
                             let their_snr = parse_snr(w[2]).unwrap_or(0);
                             let our_snr   = msg.snr.clamp(-24, 99);
                             let next_msg  = roger_report_msg(&tc, my_call, our_snr);
@@ -203,21 +234,36 @@ pub fn advance(
                                 tx_freq:      tx,
                             };
                             return Some(next_msg);
+                        } else if w[2].eq_ignore_ascii_case("RR73")
+                               || w[2].eq_ignore_ascii_case("RRR")
+                               || w[2].eq_ignore_ascii_case("73")
+                        {
+                            tracing::info!("QSO: got {} from {} at SentGrid, completing", w[2], tc);
+                            *state = QsoState::Complete {
+                                their_call:   tc,
+                                their_report: tr,
+                                my_report:    mr,
+                            };
+                            return None;
                         }
                     }
                     // Retry: resend our grid
                     mg.as_deref().map(|g| grid_response(&tc, my_call, g))
                 }
 
-                // We sent "{THEIR_CALL} {MY_CALL} -05" — wait for their R-report
+                // We sent "{THEIR_CALL} {MY_CALL} -05" — wait for their R-report or RRR/RR73
                 QsoStep::SentReport => {
                     for msg in decoded {
                         let w: Vec<&str> = msg.message.split_whitespace().collect();
-                        if w.len() >= 3
-                            && w[0].eq_ignore_ascii_case(my_call)
-                            && w[1].eq_ignore_ascii_case(&tc)
-                            && is_roger_report(w[2])
+                        if w.len() < 3
+                            || !strip_hash(w[0]).eq_ignore_ascii_case(my_call)
+                            || !strip_hash(w[1]).eq_ignore_ascii_case(&tc)
                         {
+                            continue;
+                        }
+
+                        if is_roger_report(w[2]) {
+                            // Standard: they acknowledged with R-report → send RR73
                             let their_snr = parse_snr(w[2]).unwrap_or(0);
                             let next_msg  = rr73_msg(&tc, my_call);
 
@@ -233,6 +279,35 @@ pub fn advance(
                                 tx_freq:      tx,
                             };
                             return Some(next_msg);
+                        } else if w[2].eq_ignore_ascii_case("RR73")
+                               || w[2].eq_ignore_ascii_case("RRR")
+                        {
+                            // They skipped R-report and went straight to RRR/RR73 →
+                            // send 73 to confirm
+                            let next_msg = seventy_three_msg(&tc, my_call);
+
+                            tracing::info!("QSO: got {} from {} (skipped R-report), sending 73", w[2], tc);
+
+                            *state = QsoState::InQso {
+                                their_call:   tc,
+                                their_grid:   tg,
+                                their_report: tr,
+                                my_report:    mr,
+                                my_grid:      mg,
+                                step:         QsoStep::Sent73,
+                                tx_freq:      tx,
+                            };
+                            return Some(next_msg);
+                        } else if w[2].eq_ignore_ascii_case("73") {
+                            // They sent 73 directly — QSO is done
+                            tracing::info!("QSO: got 73 from {} (skipped R-report), completing", tc);
+
+                            *state = QsoState::Complete {
+                                their_call:   tc,
+                                their_report: tr,
+                                my_report:    mr,
+                            };
+                            return None;
                         }
                     }
                     // Retry: resend our report
@@ -244,8 +319,8 @@ pub fn advance(
                     for msg in decoded {
                         let w: Vec<&str> = msg.message.split_whitespace().collect();
                         if w.len() >= 3
-                            && w[0].eq_ignore_ascii_case(my_call)
-                            && w[1].eq_ignore_ascii_case(&tc)
+                            && strip_hash(w[0]).eq_ignore_ascii_case(my_call)
+                            && strip_hash(w[1]).eq_ignore_ascii_case(&tc)
                             && (w[2].eq_ignore_ascii_case("RR73")
                                 || w[2].eq_ignore_ascii_case("RRR")
                                 || w[2].eq_ignore_ascii_case("73"))
@@ -269,27 +344,17 @@ pub fn advance(
                     mr.map(|snr| roger_report_msg(&tc, my_call, snr))
                 }
 
-                // We sent "{THEIR_CALL} {MY_CALL} RR73" — wait for their 73
+                // We sent "{THEIR_CALL} {MY_CALL} RR73" — QSO is essentially complete.
+                // In standard FT8, the QSO is logged when RR73 is sent.
+                // If we hear their 73 back, great; either way, we're done.
                 QsoStep::SentRR73 => {
-                    for msg in decoded {
-                        let w: Vec<&str> = msg.message.split_whitespace().collect();
-                        if w.len() >= 3
-                            && w[0].eq_ignore_ascii_case(my_call)
-                            && w[1].eq_ignore_ascii_case(&tc)
-                            && (w[2].eq_ignore_ascii_case("73")
-                                || w[2].eq_ignore_ascii_case("RR73"))
-                        {
-                            tracing::info!("QSO with {} complete", tc);
-                            *state = QsoState::Complete {
-                                their_call:   tc,
-                                their_report: tr,
-                                my_report:    mr,
-                            };
-                            return None; // QSO done, stop TX
-                        }
-                    }
-                    // Retry: resend RR73
-                    Some(rr73_msg(&tc, my_call))
+                    tracing::info!("QSO with {} complete (after RR73)", tc);
+                    *state = QsoState::Complete {
+                        their_call:   tc,
+                        their_report: tr,
+                        my_report:    mr,
+                    };
+                    None
                 }
 
                 // We sent 73 — QSO is effectively done

@@ -10,6 +10,7 @@
   import Login from './components/Login.svelte'
   import Settings from './components/Settings.svelte'
   import SetupWizard from './components/SetupWizard.svelte'
+  import WaterfallControls from './components/WaterfallControls.svelte'
 
   onMount(() => {
     client.connect()
@@ -50,6 +51,7 @@
 
   <section class="waterfall-section">
     <Waterfall />
+    <WaterfallControls />
   </section>
 
   <section class="decode-section">
