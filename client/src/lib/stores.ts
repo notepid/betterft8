@@ -64,6 +64,12 @@ export const alertEnabled = writable<boolean>(true)
 /** Waterfall color scheme. */
 export const waterfallScheme = writable<'classic' | 'greyscale' | 'heat'>('classic')
 
+/** Waterfall display floor in dB (-120 to 0). Values below this → black. */
+export const waterfallFloor = writable<number>(-120)
+
+/** Waterfall display ceiling in dB (-120 to 0). Values above this → full color. */
+export const waterfallCeiling = writable<number>(0)
+
 /** Available audio devices from server. */
 export const deviceList = writable<{ inputs: string[]; outputs: string[] }>({ inputs: [], outputs: [] })
 

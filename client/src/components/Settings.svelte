@@ -12,6 +12,8 @@
     rigPort,
     settingsOpen,
     waterfallScheme,
+    waterfallFloor,
+    waterfallCeiling,
     logEntries,
     wizardOpen,
   } from '../lib/stores'
@@ -222,6 +224,16 @@
             <option value="heat">Heat</option>
           </select>
         </div>
+        <div class="field-row">
+          <label for="s-wf-floor">WF floor</label>
+          <input id="s-wf-floor" type="range" min="-120" max="-1" step="1" bind:value={$waterfallFloor} />
+          <span class="level-val">{$waterfallFloor} dB</span>
+        </div>
+        <div class="field-row">
+          <label for="s-wf-ceil">WF ceiling</label>
+          <input id="s-wf-ceil" type="range" min="-119" max="0" step="1" bind:value={$waterfallCeiling} />
+          <span class="level-val">{$waterfallCeiling} dB</span>
+        </div>
         <label class="checkbox-row">
           <input type="checkbox" bind:checked={$alertEnabled} />
           Alert when callsign is heard
@@ -415,6 +427,20 @@
   }
   .banner.ok { background: #0a2a0a; color: #66cc66; border: 1px solid #226622; }
   .banner.err { background: #2a0a0a; color: #cc6666; border: 1px solid #662222; }
+
+  input[type='range'] {
+    flex: 1;
+    accent-color: #7ec8e3;
+    min-width: 0;
+  }
+
+  .level-val {
+    color: #aaa;
+    font-family: monospace;
+    white-space: nowrap;
+    min-width: 52px;
+    text-align: right;
+  }
 
   .checkbox-row {
     display: flex;

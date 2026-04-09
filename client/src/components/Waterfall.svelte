@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
-  import { decodes, selectedDecode, waterfallLine, waterfallScheme } from '../lib/stores'
+  import { decodes, selectedDecode, waterfallLine, waterfallScheme, waterfallFloor, waterfallCeiling } from '../lib/stores'
   import type { Decode } from '../lib/stores'
   import type { WaterfallMessage } from '../lib/messages'
 
@@ -15,6 +15,21 @@
   // Rebuild LUT when scheme changes.
   let colorLut = buildColorLut($waterfallScheme)
   $: colorLut = buildColorLut($waterfallScheme)
+
+  // Rebuild remap LUT when floor/ceiling changes.
+  let remapLut = buildRemapLut($waterfallFloor, $waterfallCeiling)
+  $: remapLut = buildRemapLut($waterfallFloor, $waterfallCeiling)
+
+  function buildRemapLut(floorDb: number, ceilingDb: number): Uint8Array {
+    const lut = new Uint8Array(256)
+    const floorU8 = Math.round(Math.max(0, ((floorDb + 120) / 120) * 255))
+    const ceilingU8 = Math.round(Math.min(255, ((ceilingDb + 120) / 120) * 255))
+    const range = Math.max(1, ceilingU8 - floorU8)
+    for (let i = 0; i < 256; i++) {
+      lut[i] = i <= floorU8 ? 0 : i >= ceilingU8 ? 255 : Math.round((i - floorU8) / range * 255)
+    }
+    return lut
+  }
 
   function buildColorLut(scheme: string): Uint8ClampedArray {
     const lut = new Uint8ClampedArray(256 * 4)
@@ -90,7 +105,7 @@
     for (let x = 0; x < w; x++) {
       const srcF = (x * (numBins - 1)) / Math.max(w - 1, 1)
       const srcIdx = Math.min(Math.floor(srcF), numBins - 1)
-      const value = srcArr[srcIdx]
+      const value = remapLut[srcArr[srcIdx]]
       const offset = x * 4
       imageData.data[offset + 0] = colorLut[value * 4 + 0]
       imageData.data[offset + 1] = colorLut[value * 4 + 1]
