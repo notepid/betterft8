@@ -52,7 +52,7 @@
 <style>
   .decode-list {
     overflow-y: auto;
-    max-height: 300px;
+    max-height: 500px;
     background: #0d0d1a;
     border: 1px solid #2a2a4a;
     border-radius: 4px;
