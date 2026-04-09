@@ -14,6 +14,9 @@ pub enum ServerMessage {
         log_file:          String,
         rig_host:          String,
         rig_port:          u16,
+        needs_setup:       bool,
+        os_type:           String,
+        hamlib_available:  bool,
     },
     /// Response to `Auth` (viewer) or indicates auth state.
     AuthResult { success: bool },
@@ -75,6 +78,8 @@ pub enum ServerMessage {
         success: bool,
         message: String,
     },
+    /// Response to a `GetSerialPorts` client message.
+    SerialPortList { ports: Vec<String> },
 }
 
 #[derive(Serialize, Clone)]
@@ -122,4 +127,21 @@ pub enum ClientMessage {
 
     /// Test the configured rigctld connection. Operator-only.
     TestRigctld {},
+    /// Request the list of available serial ports (for Hamlib direct setup).
+    GetSerialPorts {},
+    /// Complete the setup wizard: saves all config sections at once.
+    /// Does not require operator lock; works on first run.
+    CompleteSetup {
+        callsign:          String,
+        grid:              String,
+        operator_password: String,
+        input_device:      Option<String>,
+        output_device:     Option<String>,
+        radio_backend:     String,
+        rigctld_host:      String,
+        rigctld_port:      u16,
+        rig_model:         Option<i32>,
+        serial_port:       Option<String>,
+        baud_rate:         Option<u32>,
+    },
 }

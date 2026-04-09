@@ -57,6 +57,9 @@ export type HelloMessage = {
   log_file: string
   rig_host: string
   rig_port: number
+  needs_setup: boolean
+  os_type: string
+  hamlib_available: boolean
 }
 
 export type AuthResultMessage = {
@@ -102,6 +105,11 @@ export type RigctldTestResultMessage = {
   message: string
 }
 
+export type SerialPortListMessage = {
+  type: 'serial_port_list'
+  ports: string[]
+}
+
 export type ServerMessage =
   | { type: 'echo'; payload: unknown }
   | { type: 'error'; message: string }
@@ -116,6 +124,21 @@ export type ServerMessage =
   | DeviceListMessage
   | ConfigUpdateResultMessage
   | RigctldTestResultMessage
+  | SerialPortListMessage
+
+export type CompleteSetupPayload = {
+  callsign: string
+  grid: string
+  operator_password: string
+  input_device: string | null
+  output_device: string | null
+  radio_backend: string
+  rigctld_host: string
+  rigctld_port: number
+  rig_model: number | null
+  serial_port: string | null
+  baud_rate: number | null
+}
 
 export type ClientMessage =
   | { type: 'ping' }
@@ -133,3 +156,5 @@ export type ClientMessage =
   | { type: 'reset_qso' }
   | { type: 'config_update'; section: string; values: Record<string, unknown> }
   | { type: 'test_rigctld' }
+  | { type: 'get_serial_ports' }
+  | ({ type: 'complete_setup' } & CompleteSetupPayload)

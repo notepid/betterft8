@@ -18,7 +18,7 @@ pub struct ClientInfo {
 pub struct SessionManager {
     clients: RwLock<HashMap<ClientId, ClientInfo>>,
     operator: RwLock<Option<ClientId>>,
-    pub operator_password: String,
+    operator_password: RwLock<String>,
     pub viewer_password: Option<String>,
 }
 
@@ -27,9 +27,13 @@ impl SessionManager {
         Self {
             clients: RwLock::new(HashMap::new()),
             operator: RwLock::new(None),
-            operator_password,
+            operator_password: RwLock::new(operator_password),
             viewer_password,
         }
+    }
+
+    pub async fn update_operator_password(&self, password: String) {
+        *self.operator_password.write().await = password;
     }
 
     pub fn needs_viewer_auth(&self) -> bool {
@@ -67,7 +71,7 @@ impl SessionManager {
 
     /// Attempt to claim operator status. Returns true on success.
     pub async fn claim_operator(&self, id: ClientId, password: &str) -> bool {
-        if password != self.operator_password {
+        if password != *self.operator_password.read().await {
             return false;
         }
         // Must be authenticated first

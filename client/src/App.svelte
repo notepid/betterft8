@@ -9,6 +9,7 @@
   import QsoPanel from './components/QsoPanel.svelte'
   import Login from './components/Login.svelte'
   import Settings from './components/Settings.svelte'
+  import SetupWizard from './components/SetupWizard.svelte'
 
   // TX frequency shared between Controls and QsoPanel
   let txFreq = 1000
@@ -62,6 +63,9 @@
 
 <!-- Settings slide-out panel (portal-style fixed overlay) -->
 <Settings />
+
+<!-- Setup wizard overlay (shown on first run or manually triggered) -->
+<SetupWizard />
 
 <style>
   :global(body) {

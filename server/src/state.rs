@@ -111,6 +111,12 @@ pub struct AppState {
     // ---- Audio device enumeration -------------------------------------------
     pub audio_input_devices:  Vec<String>,
     pub audio_output_devices: Vec<String>,
+
+    // ---- Setup wizard -------------------------------------------------------
+    /// True when no betterft8.toml was found at startup; cleared after CompleteSetup.
+    pub setup_mode: AtomicBool,
+    /// Detected OS type string sent to the wizard ("windows", "linux", "raspberry_pi", "macos").
+    pub os_type: &'static str,
 }
 
 pub type SharedState = Arc<AppState>;

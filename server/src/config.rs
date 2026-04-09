@@ -121,6 +121,10 @@ impl Default for Config {
     }
 }
 
+pub fn config_file_exists() -> bool {
+    std::path::Path::new("betterft8.toml").exists()
+}
+
 pub fn load() -> Result<Config> {
     match std::fs::read_to_string("betterft8.toml") {
         Ok(contents) => Ok(toml::from_str(&contents)?),

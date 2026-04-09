@@ -79,3 +79,16 @@ export const configUpdateResult = writable<{ success: boolean; message: string |
 /** rigctld connection info from Hello (pre-populate Settings form). */
 export const rigHost = writable<string>('localhost')
 export const rigPort = writable<number>(4532)
+
+// ---- Setup wizard -----------------------------------------------------------
+
+/** True when server reports no config file exists. */
+export const needsSetup = writable<boolean>(false)
+/** OS type string from server ("windows" | "linux" | "raspberry_pi" | "macos"). */
+export const osType = writable<string>('')
+/** Whether the Hamlib direct backend feature was compiled in. */
+export const hamlibAvailable = writable<boolean>(false)
+/** Serial ports returned by GetSerialPorts. */
+export const serialPorts = writable<string[]>([])
+/** Controls whether the setup wizard overlay is shown. */
+export const wizardOpen = writable<boolean>(false)

@@ -13,6 +13,7 @@
     settingsOpen,
     waterfallScheme,
     logEntries,
+    wizardOpen,
   } from '../lib/stores'
   import { client } from '../lib/websocket'
 
@@ -185,6 +186,19 @@
           <p class="note">Radio config changes require server restart.</p>
         {/if}
       </section>
+
+      <!-- Setup Wizard shortcut -->
+      {#if $myRole === 'operator'}
+        <section>
+          <h3>Setup Wizard</h3>
+          <p class="note">Re-run the setup wizard to reconfigure your station, audio, and radio settings.</p>
+          <div class="btn-row">
+            <button on:click={() => { wizardOpen.set(true); settingsOpen.set(false) }}>
+              Open Setup Wizard
+            </button>
+          </div>
+        </section>
+      {/if}
 
       <!-- Config update result banner -->
       {#if $configUpdateResult}

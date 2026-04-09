@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage } from './messages'
+import type { ClientMessage, CompleteSetupPayload, ServerMessage } from './messages'
 import {
   addDecodes,
   alertEnabled,
@@ -6,6 +6,7 @@ import {
   configUpdateResult,
   connected,
   deviceList,
+  hamlibAvailable,
   lastMessage,
   logEntries,
   logFile,
@@ -13,13 +14,17 @@ import {
   myGrid,
   myRole,
   needsAuth,
+  needsSetup,
   operatorStatus,
+  osType,
   qsoUpdate,
   radioStatus,
   rigctldTestResult,
   rigHost,
   rigPort,
+  serialPorts,
   waterfallLine,
+  wizardOpen,
 } from './stores'
 import { get } from 'svelte/store'
 
@@ -66,6 +71,12 @@ class BetterFT8Client {
           logFile.set(msg.log_file)
           rigHost.set(msg.rig_host)
           rigPort.set(msg.rig_port)
+          needsSetup.set(msg.needs_setup)
+          osType.set(msg.os_type)
+          hamlibAvailable.set(msg.hamlib_available)
+          if (msg.needs_setup) {
+            wizardOpen.set(true)
+          }
         } else if (msg.type === 'auth_result') {
           if (msg.success) {
             needsAuth.set(false)
@@ -113,6 +124,8 @@ class BetterFT8Client {
           }
         } else if (msg.type === 'rigctld_test_result') {
           rigctldTestResult.set(msg)
+        } else if (msg.type === 'serial_port_list') {
+          serialPorts.set(msg.ports)
         } else if (msg.type === 'error') {
           authError.set(msg.message)
           lastMessage.set(msg)
@@ -155,6 +168,14 @@ class BetterFT8Client {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg))
     }
+  }
+
+  getSerialPorts() {
+    this.send({ type: 'get_serial_ports' })
+  }
+
+  completeSetup(payload: CompleteSetupPayload) {
+    this.send({ type: 'complete_setup', ...payload })
   }
 }
 

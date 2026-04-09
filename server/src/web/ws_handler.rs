@@ -49,6 +49,9 @@ async fn handle_socket(socket: WebSocket, state: SharedState, remote_addr: Strin
             log_file: cfg.station.log_file.clone(),
             rig_host: cfg.radio.rigctld_host.clone(),
             rig_port: cfg.radio.rigctld_port,
+            needs_setup:      state.setup_mode.load(Ordering::Relaxed),
+            os_type:          state.os_type.to_string(),
+            hamlib_available: cfg!(feature = "hamlib"),
         }
     };
     if send_msg(&mut sender, &hello).await.is_err() {
@@ -300,6 +303,7 @@ async fn handle_client_message(
         | ClientMessage::ResetQso {}
         | ClientMessage::ConfigUpdate { .. }
         | ClientMessage::TestRigctld {}
+        // GetSerialPorts and CompleteSetup are intentionally NOT operator-only
     );
 
     match serde_json::from_str::<ClientMessage>(text) {
@@ -448,6 +452,27 @@ async fn handle_client_message(
                     broadcast_qso_update(state).await;
                 }
 
+                ClientMessage::GetSerialPorts {} => {
+                    let ports = list_serial_ports();
+                    let reply = ServerMessage::SerialPortList { ports };
+                    let _ = send_msg(sender, &reply).await;
+                }
+
+                ClientMessage::CompleteSetup {
+                    callsign, grid, operator_password,
+                    input_device, output_device,
+                    radio_backend, rigctld_host, rigctld_port,
+                    rig_model, serial_port, baud_rate,
+                } => {
+                    let reply = handle_complete_setup(
+                        state, callsign, grid, operator_password,
+                        input_device, output_device,
+                        radio_backend, rigctld_host, rigctld_port,
+                        rig_model, serial_port, baud_rate,
+                    ).await;
+                    let _ = send_msg(sender, &reply).await;
+                }
+
                 ClientMessage::ConfigUpdate { section, values } => {
                     let reply = handle_config_update(state, &section, &values).await;
                     let _ = send_msg(sender, &reply).await;
@@ -585,6 +610,90 @@ async fn handle_config_update(
             message: Some(format!("Unknown config section: {other}")),
             requires_restart: false,
         },
+    }
+}
+
+fn list_serial_ports() -> Vec<String> {
+    match serialport::available_ports() {
+        Ok(ports) => ports.into_iter().map(|p| p.port_name).collect(),
+        Err(e) => {
+            tracing::warn!("Failed to enumerate serial ports: {e}");
+            vec![]
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn handle_complete_setup(
+    state:            &SharedState,
+    callsign:         String,
+    grid:             String,
+    operator_password: String,
+    input_device:     Option<String>,
+    output_device:    Option<String>,
+    radio_backend:    String,
+    rigctld_host:     String,
+    rigctld_port:     u16,
+    rig_model:        Option<i32>,
+    serial_port:      Option<String>,
+    baud_rate:        Option<u32>,
+) -> ServerMessage {
+    let callsign = callsign.to_uppercase();
+    let grid     = grid.to_uppercase();
+
+    if !valid_callsign(&callsign) {
+        return ServerMessage::ConfigUpdateResult {
+            success: false,
+            message: Some(format!("Invalid callsign: {callsign}")),
+            requires_restart: false,
+        };
+    }
+    if !valid_grid(&grid) {
+        return ServerMessage::ConfigUpdateResult {
+            success: false,
+            message: Some(format!("Invalid grid: {grid}")),
+            requires_restart: false,
+        };
+    }
+    if operator_password.is_empty() {
+        return ServerMessage::ConfigUpdateResult {
+            success: false,
+            message: Some("Operator password cannot be empty".into()),
+            requires_restart: false,
+        };
+    }
+
+    {
+        let mut cfg = state.config.write().unwrap();
+        cfg.station.callsign         = callsign;
+        cfg.station.grid             = grid;
+        cfg.network.operator_password = operator_password.clone();
+        cfg.audio.input_device        = input_device.filter(|s| !s.is_empty());
+        cfg.audio.output_device       = output_device.filter(|s| !s.is_empty());
+        cfg.radio.backend             = radio_backend;
+        cfg.radio.rigctld_host        = rigctld_host;
+        cfg.radio.rigctld_port        = rigctld_port;
+        cfg.radio.rig_model           = rig_model;
+        cfg.radio.serial_port         = serial_port.filter(|s| !s.is_empty());
+        cfg.radio.baud_rate           = baud_rate;
+        if let Err(e) = crate::config::save(&cfg) {
+            tracing::warn!("Config save failed during setup: {e}");
+            return ServerMessage::ConfigUpdateResult {
+                success: false,
+                message: Some(format!("Failed to save config: {e}")),
+                requires_restart: false,
+            };
+        }
+    }
+
+    state.sessions.update_operator_password(operator_password).await;
+    state.setup_mode.store(false, Ordering::Relaxed);
+    tracing::info!("Setup wizard completed; config saved");
+
+    ServerMessage::ConfigUpdateResult {
+        success: true,
+        message: Some("Setup complete — restart the server to activate audio and radio settings.".into()),
+        requires_restart: true,
     }
 }
 

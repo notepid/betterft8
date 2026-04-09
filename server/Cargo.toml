@@ -24,6 +24,7 @@ ringbuf = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
 rust-embed = "8"
 mime_guess = "2"
+serialport = "4"
 
 [features]
 default = ["hamlib"]

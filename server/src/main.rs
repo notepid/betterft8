@@ -27,6 +27,7 @@ async fn main() -> Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    let setup_mode = !config::config_file_exists();
     let config = config::load()?;
 
     let addr = format!("{}:{}", config.network.host, config.network.port);
@@ -97,6 +98,8 @@ async fn main() -> Result<()> {
         tx_sample_rate,
         audio_input_devices,
         audio_output_devices,
+        setup_mode:   AtomicBool::new(setup_mode),
+        os_type:      detect_os(),
     });
 
     // Spawn DSP waterfall task
@@ -129,6 +132,22 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Detect the host OS, including Raspberry Pi as a special case.
+fn detect_os() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "linux") {
+        let is_rpi = std::fs::read_to_string("/proc/cpuinfo")
+            .map(|s| s.contains("Raspberry Pi"))
+            .unwrap_or(false);
+        if is_rpi { "raspberry_pi" } else { "linux" }
+    } else {
+        "unknown"
+    }
 }
 
 /// Enumerate cpal audio input and output device names.
