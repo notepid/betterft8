@@ -45,21 +45,12 @@ jobs:
       - name: Build client
         working-directory: client
         run: npm run build
-      # NOTE: rustfmt is non-blocking. The codebase predates any rustfmt discipline
-      # and is not yet fully formatted; enforcing `--check` now would fail the job.
-      # Run `cargo fmt` across the crate in a dedicated cleanup change, then drop
-      # `continue-on-error` to make formatting a hard gate.
       - name: Rustfmt
         working-directory: server
         run: cargo fmt --check
-        continue-on-error: true
-      # NOTE: clippy is intentionally run WITHOUT `-D warnings`. The codebase currently
-      # has ~19 pre-existing clippy warnings; using `-D warnings` would make this job
-      # immediately red. Once the existing warnings are cleaned up, tighten this to
-      # `cargo clippy --all-targets -- -D warnings`.
       - name: Clippy
         working-directory: server
-        run: cargo clippy --all-targets
+        run: cargo clippy --all-targets -- -D warnings
       - name: Test
         working-directory: server
         run: cargo test
