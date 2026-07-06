@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
-  import { decodes, selectedDecode, waterfallLine, waterfallScheme, waterfallFloor, waterfallCeiling, waterfallAutoLevel, txFreq } from '../lib/stores'
+  import { decodes, selectedDecode, waterfallLine, waterfallScheme, waterfallFloor, waterfallCeiling, waterfallAutoLevel, txFreq, theme } from '../lib/stores'
   import type { Decode } from '../lib/stores'
   import { callerCall } from '../lib/callsign'
   import type { WaterfallMessage } from '../lib/messages'
@@ -21,6 +21,12 @@
     TX_BAND_COLOR = cs.getPropertyValue('--tx-active').trim() || TX_BAND_COLOR
   }
   // The canvas background well uses --waterfall-bg via CSS on .waterfall-wrap.
+
+  // Re-read the palette when the theme changes. requestAnimationFrame defers the
+  // read until after the new `data-theme` attribute has been applied to the DOM,
+  // so getComputedStyle sees the new token values. The overlay/TX band redraw
+  // every frame, so the refreshed colours take effect on the next line.
+  $: if ($theme) requestAnimationFrame(syncCanvasColours)
 
   // Apply an alpha to one of the hex domain colours for canvas fills/strokes.
   function withAlpha(hex: string, alpha: number): string {

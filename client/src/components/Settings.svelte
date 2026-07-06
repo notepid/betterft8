@@ -13,6 +13,8 @@
     settingsOpen,
     logEntries,
     wizardOpen,
+    theme,
+    THEMES,
   } from '../lib/stores'
   import { client } from '../lib/websocket'
   import { trapFocus } from '../lib/actions'
@@ -209,6 +211,19 @@
           {/if}
         </div>
       {/if}
+
+      <!-- Appearance -->
+      <section>
+        <h3>Appearance</h3>
+        <div class="field-row">
+          <label for="s-theme">Theme</label>
+          <select id="s-theme" class="input" bind:value={$theme}>
+            {#each THEMES as t}
+              <option value={t.value}>{t.label}</option>
+            {/each}
+          </select>
+        </div>
+      </section>
 
       <!-- Notifications -->
       <section>

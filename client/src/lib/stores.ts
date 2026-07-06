@@ -90,6 +90,46 @@ export function addDecodes(period: number, entries: Array<{ snr: number; dt: num
 // Decode that the user has clicked to respond to
 export const selectedDecode = writable<Decode | null>(null)
 
+// ---- Theme ------------------------------------------------------------------
+
+/** Selectable UI theme. "graphite" is the base :root palette (no data-theme
+ * attribute); the others map to `:root[data-theme="…"]` override blocks. */
+export type Theme = 'graphite' | 'slate' | 'phosphor' | 'light'
+
+/** Themes offered in the picker, with human-readable labels. */
+export const THEMES: { value: Theme; label: string }[] = [
+  { value: 'graphite', label: 'Graphite & Amber' },
+  { value: 'slate', label: 'Slate & Teal' },
+  { value: 'phosphor', label: 'Phosphor' },
+  { value: 'light', label: 'Light' },
+]
+
+const THEME_STORAGE_KEY = 'bft8-theme'
+
+function initialTheme(): Theme {
+  if (typeof localStorage === 'undefined') return 'graphite'
+  const stored = localStorage.getItem(THEME_STORAGE_KEY)
+  return THEMES.some((t) => t.value === stored) ? (stored as Theme) : 'graphite'
+}
+
+/** Active UI theme. Subscribing at module load applies the persisted value to
+ * the document root before first paint (avoids a flash of the default theme). */
+export const theme = writable<Theme>(initialTheme())
+
+theme.subscribe((value) => {
+  if (typeof document !== 'undefined') {
+    // "graphite" is the base :root — no attribute; others set data-theme.
+    if (value === 'graphite') {
+      document.documentElement.removeAttribute('data-theme')
+    } else {
+      document.documentElement.setAttribute('data-theme', value)
+    }
+  }
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(THEME_STORAGE_KEY, value)
+  }
+})
+
 // ---- Settings ---------------------------------------------------------------
 
 /** Whether the Settings panel is open. */
