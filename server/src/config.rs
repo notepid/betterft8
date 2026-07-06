@@ -1,5 +1,10 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
+
+/// The config path the server was launched with, so `save()` writes back to the
+/// same file `load()` read from (rather than a hardcoded default).
+static CONFIG_PATH: OnceLock<String> = OnceLock::new();
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Config {
@@ -121,23 +126,44 @@ impl Default for Config {
     }
 }
 
-pub fn config_file_exists() -> bool {
-    std::path::Path::new("betterft8.toml").exists()
+pub fn config_file_exists(path: &str) -> bool {
+    std::path::Path::new(path).exists()
 }
 
-pub fn load() -> Result<Config> {
-    match std::fs::read_to_string("betterft8.toml") {
-        Ok(contents) => Ok(toml::from_str(&contents)?),
+pub fn load(path: &str) -> Result<Config> {
+    // Remember where we loaded from so save() writes back to the same file.
+    let _ = CONFIG_PATH.set(path.to_string());
+
+    let mut config = match std::fs::read_to_string(path) {
+        Ok(contents) => {
+            tracing::info!("Loaded config from {path}");
+            toml::from_str(&contents)?
+        }
         Err(_) => {
-            tracing::warn!("betterft8.toml not found, using defaults");
-            Ok(Config::default())
+            tracing::warn!("{path} not found, using defaults");
+            Config::default()
+        }
+    };
+
+    // An empty viewer password means "open viewing" (documented behaviour).
+    // Normalise Some("") to None so it is not treated as a real password.
+    if let Some(vp) = &config.network.viewer_password {
+        if vp.is_empty() {
+            config.network.viewer_password = None;
         }
     }
+
+    Ok(config)
 }
 
-/// Persist the current in-memory config back to `betterft8.toml`.
+/// Persist the current in-memory config back to the file it was loaded from
+/// (falling back to `betterft8.toml` if `load()` was never called).
 pub fn save(config: &Config) -> Result<()> {
+    let path = CONFIG_PATH
+        .get()
+        .map(String::as_str)
+        .unwrap_or("betterft8.toml");
     let toml_str = toml::to_string_pretty(config)?;
-    std::fs::write("betterft8.toml", toml_str)?;
+    std::fs::write(path, toml_str)?;
     Ok(())
 }

@@ -11,6 +11,8 @@ import type {
 
 export const connected = writable(false)
 export const lastMessage = writable<ServerMessage | null>(null)
+/** Set when a command could not be sent (e.g. socket down); cleared on reconnect. */
+export const commandError = writable<string | null>(null)
 export const waterfallLine = writable<WaterfallMessage | null>(null)
 export const radioStatus = writable<RadioStatusMessage | null>(null)
 export const qsoUpdate = writable<QsoUpdateMessage | null>(null)
@@ -30,6 +32,7 @@ export const myGrid = writable<string>('')
 export const logFile = writable<string>('ft8.adi')
 
 export type Decode = {
+  id: number // monotonic, unique per received decode — used as a stable list key
   period: number
   snr: number
   dt: number
@@ -41,9 +44,13 @@ export type Decode = {
 // Newest decodes at the front; trimmed to 500 entries max.
 export const decodes = writable<Decode[]>([])
 
+// Monotonic counter guaranteeing a unique key even when the same
+// period/freq/message is re-broadcast (multi-pass decoder or reconnect).
+let decodeSeq = 0
+
 export function addDecodes(period: number, entries: Array<{ snr: number; dt: number; freq: number; message: string }>) {
   const utcTime = new Date(period * 1000).toISOString().slice(11, 19)
-  const newItems: Decode[] = entries.map((e) => ({ period, utcTime, ...e }))
+  const newItems: Decode[] = entries.map((e) => ({ id: decodeSeq++, period, utcTime, ...e }))
   decodes.update((prev) => {
     const next = [...newItems, ...prev]
     return next.length > 500 ? next.slice(0, 500) : next

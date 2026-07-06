@@ -1,14 +1,14 @@
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
+use realfft::RealFftPlanner;
+use ringbuf::traits::{Consumer, Observer};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 use tokio::time::{interval, Duration};
-use realfft::RealFftPlanner;
-use base64::engine::general_purpose::STANDARD as BASE64;
-use base64::Engine;
-use ringbuf::traits::{Consumer, Observer};
 
+use super::fft::{apply_hann_window, spectrum_to_u8};
 use crate::audio::capture::RingConsumer;
 use crate::state::WaterfallLine;
-use super::fft::{apply_hann_window, spectrum_to_u8};
 
 const FFT_SIZE: usize = 4096;
 const FREQ_MAX: u32 = 5000;
@@ -28,7 +28,9 @@ pub async fn run(mut cons: RingConsumer, sample_rate: u32, tx: broadcast::Sender
 
     tracing::info!(
         "Waterfall DSP: {}Hz sample rate, {} FFT bins for 0–{}Hz",
-        sample_rate, num_bins, FREQ_MAX
+        sample_rate,
+        num_bins,
+        FREQ_MAX
     );
 
     loop {

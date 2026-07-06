@@ -12,36 +12,36 @@ const MAX_ENCODE_SAMPLES: usize = 15 * 192_000;
 /// Decoded FT8 message from the C wrapper.
 #[repr(C)]
 struct Ft8DecodedC {
-    snr:     i32,
-    dt:      f32,
-    freq:    f32,
+    snr: i32,
+    dt: f32,
+    freq: f32,
     message: [i8; 36], // FT8_WRAPPER_MAX_MESSAGE
 }
 
 impl Ft8DecodedC {
     const ZERO: Self = Self {
-        snr:     0,
-        dt:      0.0,
-        freq:    0.0,
+        snr: 0,
+        dt: 0.0,
+        freq: 0.0,
         message: [0i8; 36],
     };
 }
 
 extern "C" {
     fn ft8_decode_audio(
-        samples:     *const f32,
+        samples: *const f32,
         num_samples: i32,
         sample_rate: i32,
-        results:     *mut Ft8DecodedC,
+        results: *mut Ft8DecodedC,
         max_results: i32,
     ) -> i32;
 
     fn ft8_encode_audio(
         message_text: *const std::ffi::c_char,
-        frequency:    f32,
-        sample_rate:  i32,
-        output:       *mut f32,
-        max_samples:  i32,
+        frequency: f32,
+        sample_rate: i32,
+        output: *mut f32,
+        max_samples: i32,
     ) -> i32;
 }
 
@@ -51,9 +51,9 @@ static CODEC_MUTEX: Mutex<()> = Mutex::new(());
 /// A single decoded FT8 message.
 #[derive(Clone)]
 pub struct DecodedMessage {
-    pub snr:     i32,
-    pub dt:      f32,
-    pub freq:    f32,
+    pub snr: i32,
+    pub dt: f32,
+    pub freq: f32,
     pub message: String,
 }
 
@@ -88,9 +88,9 @@ pub fn decode(samples: &[f32], sample_rate: u32) -> Vec<DecodedMessage> {
                 .map(|&c| c as u8)
                 .collect();
             DecodedMessage {
-                snr:     r.snr,
-                dt:      r.dt,
-                freq:    r.freq,
+                snr: r.snr,
+                dt: r.dt,
+                freq: r.freq,
                 message: String::from_utf8_lossy(&msg).into_owned(),
             }
         })
@@ -104,8 +104,8 @@ pub fn decode(samples: &[f32], sample_rate: u32) -> Vec<DecodedMessage> {
 pub fn encode(message: &str, freq_hz: f32, sample_rate: u32) -> Result<Vec<f32>> {
     let _guard = CODEC_MUTEX.lock().unwrap_or_else(|p| p.into_inner());
 
-    let c_msg = CString::new(message)
-        .map_err(|_| anyhow!("FT8 encode: message contains interior NUL"))?;
+    let c_msg =
+        CString::new(message).map_err(|_| anyhow!("FT8 encode: message contains interior NUL"))?;
 
     let mut buf = vec![0f32; MAX_ENCODE_SAMPLES];
 

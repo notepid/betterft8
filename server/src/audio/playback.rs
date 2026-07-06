@@ -4,15 +4,10 @@ use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
 
+#[derive(Default)]
 struct PlaybackBuf {
     samples: Vec<f32>,
-    pos:     usize,
-}
-
-impl Default for PlaybackBuf {
-    fn default() -> Self {
-        PlaybackBuf { samples: Vec::new(), pos: 0 }
-    }
+    pos: usize,
 }
 
 /// Send+Sync handle to the playback buffer.  Store this in `AppState`.
@@ -32,7 +27,7 @@ impl PlaybackHandle {
     pub fn queue(&self, samples: Vec<f32>) {
         let mut g = self.buf.lock().unwrap();
         g.samples = samples;
-        g.pos     = 0;
+        g.pos = 0;
     }
 
     /// Stop playback immediately (revert to silence).
@@ -40,12 +35,6 @@ impl PlaybackHandle {
         let mut g = self.buf.lock().unwrap();
         g.samples.clear();
         g.pos = 0;
-    }
-
-    /// Returns true if there are still samples remaining in the buffer.
-    pub fn is_playing(&self) -> bool {
-        let g = self.buf.lock().unwrap();
-        g.pos < g.samples.len()
     }
 }
 
@@ -60,7 +49,7 @@ impl PlaybackHandle {
 /// The returned `cpal::Stream` must be kept alive (e.g. stored in `main`).
 /// The `PlaybackHandle` is `Send + Sync` and can be placed in `AppState`.
 pub fn start_playback(device_name: Option<&str>) -> Result<(PlaybackHandle, cpal::Stream)> {
-    let host   = cpal::default_host();
+    let host = cpal::default_host();
     let device = if let Some(name) = device_name {
         host.output_devices()?
             .find(|d| d.name().map(|n| n == name).unwrap_or(false))
@@ -77,16 +66,18 @@ pub fn start_playback(device_name: Option<&str>) -> Result<(PlaybackHandle, cpal
 
     let default_cfg = device.default_output_config()?;
     let sample_rate = default_cfg.sample_rate().0;
-    let channels    = default_cfg.channels() as usize;
-    let fmt         = default_cfg.sample_format();
+    let channels = default_cfg.channels() as usize;
+    let fmt = default_cfg.sample_format();
 
     tracing::info!(
         "Output audio config: {}Hz {} ch {:?}",
-        sample_rate, channels, fmt
+        sample_rate,
+        channels,
+        fmt
     );
 
     let stream_cfg = cpal::StreamConfig {
-        channels:    channels as u16,
+        channels: channels as u16,
         sample_rate: cpal::SampleRate(sample_rate),
         buffer_size: cpal::BufferSize::Default,
     };
@@ -103,7 +94,8 @@ pub fn start_playback(device_name: Option<&str>) -> Result<(PlaybackHandle, cpal
             device.build_output_stream(
                 &stream_cfg,
                 move |data: &mut [f32], _| fill_output(data, channels, &b),
-                err_fn, None,
+                err_fn,
+                None,
             )?
         }
         SampleFormat::I16 => {
@@ -117,7 +109,8 @@ pub fn start_playback(device_name: Option<&str>) -> Result<(PlaybackHandle, cpal
                         *d = (*s * 32_767.0).clamp(-32_768.0, 32_767.0) as i16;
                     }
                 },
-                err_fn, None,
+                err_fn,
+                None,
             )?
         }
         SampleFormat::I32 => {
@@ -128,11 +121,11 @@ pub fn start_playback(device_name: Option<&str>) -> Result<(PlaybackHandle, cpal
                     let mut tmp = vec![0f32; data.len()];
                     fill_output(&mut tmp, channels, &b);
                     for (d, s) in data.iter_mut().zip(tmp.iter()) {
-                        *d = (*s * 2_147_483_647.0)
-                            .clamp(-2_147_483_648.0, 2_147_483_647.0) as i32;
+                        *d = (*s * 2_147_483_647.0).clamp(-2_147_483_648.0, 2_147_483_647.0) as i32;
                     }
                 },
-                err_fn, None,
+                err_fn,
+                None,
             )?
         }
         other => return Err(anyhow!("unsupported output sample format: {:?}", other)),

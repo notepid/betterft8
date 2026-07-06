@@ -1,6 +1,10 @@
 //! Raw FFI declarations for the Hamlib C library.
 //! Only the functions needed for basic rig control are declared here.
 
+// These type aliases deliberately mirror Hamlib's C type names (freq_t, vfo_t,
+// etc.) so the mapping to the C API stays obvious; keep their snake_case names.
+#![allow(non_camel_case_types)]
+
 use std::os::raw::{c_char, c_double, c_int};
 
 /// Opaque rig handle (`Rig *` in C).
@@ -47,12 +51,7 @@ extern "C" {
         mode: *mut rmode_t,
         width: *mut pbwidth_t,
     ) -> c_int;
-    pub fn rig_set_mode(
-        rig: RigHandle,
-        vfo: vfo_t,
-        mode: rmode_t,
-        width: pbwidth_t,
-    ) -> c_int;
+    pub fn rig_set_mode(rig: RigHandle, vfo: vfo_t, mode: rmode_t, width: pbwidth_t) -> c_int;
 
     pub fn rig_get_ptt(rig: RigHandle, vfo: vfo_t, ptt: *mut ptt_t) -> c_int;
     pub fn rig_set_ptt(rig: RigHandle, vfo: vfo_t, ptt: ptt_t) -> c_int;

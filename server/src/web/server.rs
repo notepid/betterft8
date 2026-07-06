@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use axum::{
-    extract::State,
-    http::{header, StatusCode, Uri},
+    extract::{Query, State},
+    http::{header, HeaderMap, StatusCode, Uri},
     response::IntoResponse,
     routing::{any, get},
     Router,
@@ -8,8 +10,8 @@ use axum::{
 use rust_embed::Embed;
 use tower_http::{cors::CorsLayer, services::ServeDir};
 
-use crate::state::SharedState;
 use super::ws_handler::ws_handler;
+use crate::state::SharedState;
 
 /// Client SPA assets embedded at compile time from `client/dist/`.
 #[derive(Embed)]
@@ -38,9 +40,12 @@ pub fn build_router(state: SharedState) -> Router {
         router.fallback(serve_embedded)
     };
 
-    router
-        .with_state(state)
-        .layer(CorsLayer::permissive())
+    // The SPA is served from the same origin as the API/WebSocket, so no
+    // cross-origin access is required. Use a default (non-permissive) CORS layer
+    // so we do not echo arbitrary `Origin`s or enable credentialed cross-site
+    // requests. Cross-site WebSocket upgrades are separately blocked by the
+    // Origin check in `ws_handler`.
+    router.with_state(state).layer(CorsLayer::new())
 }
 
 /// Serve files from the embedded client assets, with SPA fallback to index.html.
@@ -67,12 +72,33 @@ async fn serve_embedded(uri: Uri) -> impl IntoResponse {
     }
 }
 
-async fn download_log(State(state): State<SharedState>) -> impl IntoResponse {
+async fn download_log(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    // Auth is otherwise WS-only, so gate this HTTP route with the same viewer
+    // password. Accept the credential either as a `?token=` query parameter or an
+    // `Authorization: Bearer <token>` header. When no viewer password is set,
+    // viewing is open and the log stays downloadable without a token.
+    let token = params.get("token").map(|s| s.as_str()).or_else(|| {
+        headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v.strip_prefix("Bearer ").unwrap_or(v).trim())
+    });
+    if !state.sessions.check_viewer_credential(token) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+
     let path = state.config.read().unwrap().station.log_file.clone();
     match tokio::fs::read(&path).await {
         Ok(content) => (
             [
-                (header::CONTENT_DISPOSITION, "attachment; filename=\"ft8.adi\""),
+                (
+                    header::CONTENT_DISPOSITION,
+                    "attachment; filename=\"ft8.adi\"",
+                ),
                 (header::CONTENT_TYPE, "text/plain; charset=utf-8"),
             ],
             content,

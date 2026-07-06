@@ -38,7 +38,7 @@ impl HamlibDirect {
 
             // Set serial port path
             let port_c = CString::new(serial_port)?;
-            let tok = rig_token_lookup(handle, b"rig_pathname\0".as_ptr() as *const _);
+            let tok = rig_token_lookup(handle, c"rig_pathname".as_ptr());
             if tok > 0 {
                 let ret = rig_set_conf(handle, tok, port_c.as_ptr());
                 if ret != 0 {
@@ -49,7 +49,7 @@ impl HamlibDirect {
 
             // Set baud rate
             let baud_str = CString::new(baud_rate.to_string())?;
-            let tok = rig_token_lookup(handle, b"serial_speed\0".as_ptr() as *const _);
+            let tok = rig_token_lookup(handle, c"serial_speed".as_ptr());
             if tok > 0 {
                 let ret = rig_set_conf(handle, tok, baud_str.as_ptr());
                 if ret != 0 {
@@ -64,7 +64,9 @@ impl HamlibDirect {
                 return Err(anyhow!("rig_open failed: {ret}"));
             }
 
-            Ok(HamlibDirect { rig: handle as usize })
+            Ok(HamlibDirect {
+                rig: handle as usize,
+            })
         }
     }
 }

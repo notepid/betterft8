@@ -9,10 +9,58 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# All jobs run on GitHub-hosted runners. For a public repo these are free and,
+# unlike self-hosted runners, cannot be used by a fork PR to execute code on the
+# maintainer's own machines — so no fork `if:` guard is needed. If you ever move
+# release builds back to self-hosted runners, re-add a guard so fork pull_request
+# events do not run on them:
+#   if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
 jobs:
+  # Lint / test / typecheck.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libhamlib-dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install client deps
+        working-directory: client
+        run: npm ci
+      # The server embeds client/dist at compile time via rust-embed, so the
+      # client must be built before clippy/test or the embed derive fails to
+      # compile. This also validates the client build and lets svelte-check reuse
+      # the installed deps below.
+      - name: Build client
+        working-directory: client
+        run: npm run build
+      - name: Rustfmt
+        working-directory: server
+        run: cargo fmt --check
+      - name: Clippy
+        working-directory: server
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Test
+        working-directory: server
+        run: cargo test
+      - name: Svelte check
+        working-directory: client
+        run: npm run check
+
   # Build the Svelte client (shared across all platform builds)
   client:
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,7 +80,7 @@ jobs:
   # Windows x64 — with Hamlib (vendored DLLs)
   windows:
     needs: client
-    runs-on: [self-hosted, Windows]
+    runs-on: windows-latest
     defaults:
       run:
         shell: pwsh
@@ -42,8 +90,7 @@ jobs:
         with:
           name: client-dist
           path: client/dist/
-      - name: Update Rust
-        run: rustup update stable && rustup default stable
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: server
@@ -66,7 +113,7 @@ jobs:
   # Windows x64 — rigctld only (no Hamlib DLLs needed)
   windows-rigctld:
     needs: client
-    runs-on: [self-hosted, Windows]
+    runs-on: windows-latest
     defaults:
       run:
         shell: pwsh
@@ -76,8 +123,7 @@ jobs:
         with:
           name: client-dist
           path: client/dist/
-      - name: Update Rust
-        run: rustup update stable && rustup default stable
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: server
@@ -96,7 +142,7 @@ jobs:
   # Linux x64 — with Hamlib (requires libhamlib4 at runtime)
   linux:
     needs: client
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -124,7 +170,7 @@ jobs:
   # Linux x64 — rigctld only (no Hamlib dependency)
   linux-rigctld:
     needs: client
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -152,7 +198,7 @@ jobs:
   # Raspberry Pi aarch64 — with Hamlib (requires libhamlib4 at runtime)
   raspberry-pi:
     needs: client
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -179,7 +225,7 @@ jobs:
   # Raspberry Pi aarch64 — rigctld only (no Hamlib dependency)
   raspberry-pi-rigctld:
     needs: client
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4

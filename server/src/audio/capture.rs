@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
+use ringbuf::traits::{Producer, Split};
 use ringbuf::HeapRb;
-use ringbuf::traits::{Split, Producer};
 
 use crate::config::AudioConfig;
 
@@ -15,7 +15,10 @@ pub type AudioBuf = Arc<Mutex<Vec<f32>>>;
 /// Start audio capture. Returns the ring buffer consumer, effective sample rate,
 /// and the cpal Stream (must be kept alive).
 /// `decode_buf` receives every post-decimation mono sample for the FT8 engine.
-pub fn start_capture(config: &AudioConfig, decode_buf: AudioBuf) -> Result<(RingConsumer, u32, cpal::Stream)> {
+pub fn start_capture(
+    config: &AudioConfig,
+    decode_buf: AudioBuf,
+) -> Result<(RingConsumer, u32, cpal::Stream)> {
     let host = cpal::default_host();
 
     let device = if let Some(name) = &config.input_device {
@@ -27,7 +30,10 @@ pub fn start_capture(config: &AudioConfig, decode_buf: AudioBuf) -> Result<(Ring
             .ok_or_else(|| anyhow!("no default audio input device available"))?
     };
 
-    tracing::info!("Audio input device: {}", device.name().unwrap_or_else(|_| "unknown".into()));
+    tracing::info!(
+        "Audio input device: {}",
+        device.name().unwrap_or_else(|_| "unknown".into())
+    );
 
     let default_cfg = device.default_input_config()?;
     let native_rate = default_cfg.sample_rate().0;
@@ -36,7 +42,9 @@ pub fn start_capture(config: &AudioConfig, decode_buf: AudioBuf) -> Result<(Ring
 
     tracing::info!(
         "Native audio config: {}Hz, {} ch, {:?}",
-        native_rate, native_channels, sample_format
+        native_rate,
+        native_channels,
+        sample_format
     );
 
     let target_rate = config.sample_rate;
@@ -47,12 +55,23 @@ pub fn start_capture(config: &AudioConfig, decode_buf: AudioBuf) -> Result<(Ring
     } else {
         tracing::warn!(
             "Cannot cleanly decimate {}Hz to {}Hz, using native rate for FFT",
-            native_rate, target_rate
+            native_rate,
+            target_rate
         );
         (native_rate, 1)
     };
 
-    tracing::info!("Effective sample rate: {}Hz (decimation: {}x)", effective_rate, decimate_factor);
+    tracing::info!(
+        "Effective sample rate: {}Hz (decimation: {}x)",
+        effective_rate,
+        decimate_factor
+    );
+
+    // Size the decode buffer from the *effective* rate (~20 s of audio).  When
+    // native_rate is not a clean multiple of the target we fall back to the
+    // native rate with no decimation, so a hardcoded 12 kHz cap would only hold
+    // a few seconds and decoding would silently fail.
+    let max_decode_samples = effective_rate as usize * 20;
 
     // Ring buffer: 20 seconds at effective rate
     let rb = HeapRb::<f32>::new(effective_rate as usize * 20);
@@ -78,10 +97,20 @@ pub fn start_capture(config: &AudioConfig, decode_buf: AudioBuf) -> Result<(Ring
             device.build_input_stream(
                 &stream_config,
                 move |data: &[f32], _| {
-                    write_samples(data, native_channels, decimate_factor,
-                        &mut prod, &db, &mut mono_acc, &mut mono_count, &mut dec_count);
+                    write_samples(
+                        data,
+                        native_channels,
+                        decimate_factor,
+                        max_decode_samples,
+                        &mut prod,
+                        &db,
+                        &mut mono_acc,
+                        &mut mono_count,
+                        &mut dec_count,
+                    );
                 },
-                err_fn, None,
+                err_fn,
+                None,
             )?
         }
         SampleFormat::I16 => {
@@ -94,10 +123,20 @@ pub fn start_capture(config: &AudioConfig, decode_buf: AudioBuf) -> Result<(Ring
                 &stream_config,
                 move |data: &[i16], _| {
                     let converted: Vec<f32> = data.iter().map(|&s| s as f32 / 32768.0).collect();
-                    write_samples(&converted, native_channels, decimate_factor,
-                        &mut prod, &db, &mut mono_acc, &mut mono_count, &mut dec_count);
+                    write_samples(
+                        &converted,
+                        native_channels,
+                        decimate_factor,
+                        max_decode_samples,
+                        &mut prod,
+                        &db,
+                        &mut mono_acc,
+                        &mut mono_count,
+                        &mut dec_count,
+                    );
                 },
-                err_fn, None,
+                err_fn,
+                None,
             )?
         }
         SampleFormat::I32 => {
@@ -109,11 +148,22 @@ pub fn start_capture(config: &AudioConfig, decode_buf: AudioBuf) -> Result<(Ring
             device.build_input_stream(
                 &stream_config,
                 move |data: &[i32], _| {
-                    let converted: Vec<f32> = data.iter().map(|&s| s as f32 / 2_147_483_648.0).collect();
-                    write_samples(&converted, native_channels, decimate_factor,
-                        &mut prod, &db, &mut mono_acc, &mut mono_count, &mut dec_count);
+                    let converted: Vec<f32> =
+                        data.iter().map(|&s| s as f32 / 2_147_483_648.0).collect();
+                    write_samples(
+                        &converted,
+                        native_channels,
+                        decimate_factor,
+                        max_decode_samples,
+                        &mut prod,
+                        &db,
+                        &mut mono_acc,
+                        &mut mono_count,
+                        &mut dec_count,
+                    );
                 },
-                err_fn, None,
+                err_fn,
+                None,
             )?
         }
         SampleFormat::U16 => {
@@ -125,13 +175,24 @@ pub fn start_capture(config: &AudioConfig, decode_buf: AudioBuf) -> Result<(Ring
             device.build_input_stream(
                 &stream_config,
                 move |data: &[u16], _| {
-                    let converted: Vec<f32> = data.iter()
+                    let converted: Vec<f32> = data
+                        .iter()
                         .map(|&s| (s as f32 - 32768.0) / 32768.0)
                         .collect();
-                    write_samples(&converted, native_channels, decimate_factor,
-                        &mut prod, &db, &mut mono_acc, &mut mono_count, &mut dec_count);
+                    write_samples(
+                        &converted,
+                        native_channels,
+                        decimate_factor,
+                        max_decode_samples,
+                        &mut prod,
+                        &db,
+                        &mut mono_acc,
+                        &mut mono_count,
+                        &mut dec_count,
+                    );
                 },
-                err_fn, None,
+                err_fn,
+                None,
             )?
         }
         fmt => return Err(anyhow!("unsupported sample format: {:?}", fmt)),
@@ -141,13 +202,14 @@ pub fn start_capture(config: &AudioConfig, decode_buf: AudioBuf) -> Result<(Ring
     Ok((cons, effective_rate, stream))
 }
 
-/// Maximum samples kept in the decode buffer (20 seconds at target rate).
-const MAX_DECODE_SAMPLES: usize = 12000 * 20;
-
+// Low-level audio-decimation helper: bundling these mutable running-state args
+// into a struct would add churn without clarifying this hot per-callback path.
+#[allow(clippy::too_many_arguments)]
 fn write_samples(
     data: &[f32],
     channels: usize,
     decimate: usize,
+    max_decode_samples: usize,
     prod: &mut impl Producer<Item = f32>,
     decode_buf: &AudioBuf,
     mono_acc: &mut f32,
@@ -168,8 +230,8 @@ fn write_samples(
                 // Non-blocking write to decode buffer; drop sample if locked.
                 if let Ok(mut buf) = decode_buf.try_lock() {
                     buf.push(mono);
-                    if buf.len() > MAX_DECODE_SAMPLES {
-                        let excess = buf.len() - MAX_DECODE_SAMPLES;
+                    if buf.len() > max_decode_samples {
+                        let excess = buf.len() - max_decode_samples;
                         buf.drain(..excess);
                     }
                 }

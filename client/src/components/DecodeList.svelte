@@ -25,7 +25,7 @@
       </tr>
     </thead>
     <tbody>
-      {#each $decodes as d (d.period + '-' + d.freq.toFixed(0) + '-' + d.message)}
+      {#each $decodes as d (d.id)}
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
         <tr

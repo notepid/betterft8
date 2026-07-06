@@ -1,14 +1,35 @@
 use std::collections::HashMap;
 
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
 use super::messages::ServerMessage;
 
 pub type ClientId = Uuid;
 
+/// Byte comparison whose running time does not depend on *where* two
+/// equal-length inputs first differ, so a matching prefix can't be discovered
+/// by timing. It short-circuits on a length mismatch, so the length of the
+/// expected password can still leak — acceptable here, since password length is
+/// not the secret and the guessing space is dominated by content. (The `subtle`
+/// crate is not a dependency, so this is implemented inline.)
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
 pub struct ClientInfo {
+    // Retained for logging/debugging of connected clients; not currently read
+    // elsewhere in the code, but kept as useful per-client identity metadata.
+    #[allow(dead_code)]
     pub id: ClientId,
+    #[allow(dead_code)]
     pub remote_addr: String,
     pub is_operator: bool,
     pub authenticated: bool,
@@ -40,24 +61,39 @@ impl SessionManager {
         self.viewer_password.is_some()
     }
 
+    /// Verify a viewer credential (used by non-WS routes such as `/api/log`).
+    /// Returns true if viewing is open (no viewer password) or the supplied
+    /// candidate matches the configured viewer password (constant-time).
+    pub fn check_viewer_credential(&self, candidate: Option<&str>) -> bool {
+        match &self.viewer_password {
+            None => true,
+            Some(vp) => candidate
+                .map(|c| constant_time_eq(c.as_bytes(), vp.as_bytes()))
+                .unwrap_or(false),
+        }
+    }
+
     /// Register a new connection. Auto-authenticates if no viewer password is set.
     pub async fn connect(&self, remote_addr: String, tx: mpsc::Sender<ServerMessage>) -> ClientId {
         let id = Uuid::new_v4();
         let authenticated = self.viewer_password.is_none();
-        self.clients.write().await.insert(id, ClientInfo {
+        self.clients.write().await.insert(
             id,
-            remote_addr,
-            is_operator: false,
-            authenticated,
-            tx,
-        });
+            ClientInfo {
+                id,
+                remote_addr,
+                is_operator: false,
+                authenticated,
+                tx,
+            },
+        );
         id
     }
 
     /// Authenticate a viewer. Returns true on success.
     pub async fn authenticate(&self, id: ClientId, password: &str) -> bool {
         if let Some(vp) = &self.viewer_password {
-            if password != vp {
+            if !constant_time_eq(password.as_bytes(), vp.as_bytes()) {
                 return false;
             }
         }
@@ -71,7 +107,10 @@ impl SessionManager {
 
     /// Attempt to claim operator status. Returns true on success.
     pub async fn claim_operator(&self, id: ClientId, password: &str) -> bool {
-        if password != *self.operator_password.read().await {
+        if !constant_time_eq(
+            password.as_bytes(),
+            self.operator_password.read().await.as_bytes(),
+        ) {
             return false;
         }
         // Must be authenticated first
@@ -125,13 +164,6 @@ impl SessionManager {
 
     pub async fn is_operator(&self, id: ClientId) -> bool {
         *self.operator.read().await == Some(id)
-    }
-
-    pub async fn is_authenticated(&self, id: ClientId) -> bool {
-        self.clients.read().await
-            .get(&id)
-            .map(|c| c.authenticated)
-            .unwrap_or(false)
     }
 
     pub async fn current_operator(&self) -> Option<ClientId> {

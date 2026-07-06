@@ -11,5 +11,30 @@ Restart=on-failure
 RestartSec=5
 Environment=RUST_LOG=info
 
+# --- Sandboxing / hardening -------------------------------------------------
+# Drop privileges and lock down the filesystem. The service still needs the
+# network (rigctld / web server) and audio devices, plus write access to its
+# working directory (config + ADIF log). Adjust the paths below if you install
+# elsewhere than /home/pi/betterft8.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictNamespaces=true
+# The working dir holds betterft8.toml (rewritten by the Settings UI) and the
+# ADIF log, so it must be writable even though ProtectHome is read-only.
+ReadWritePaths=/home/pi/betterft8
+
+# Audio access: cpal talks to the sound hardware, which usually requires the
+# service user to be in the "audio" group. If capture/playback fails, grant it:
+SupplementaryGroups=audio
+# NOTE: Depending on your setup you may also need to relax the sandbox for audio
+# device nodes — e.g. add `DeviceAllow=char-alsa rw` (and keep PrivateDevices
+# unset), or loosen `ProtectSystem=strict` to `ProtectSystem=full`, if ALSA/PulseAudio
+# cannot reach /dev/snd. Test `systemctl start betterft8` and check the journal.
+
 [Install]
 WantedBy=multi-user.target

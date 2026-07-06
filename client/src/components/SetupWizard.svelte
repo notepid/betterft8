@@ -70,7 +70,7 @@
 
   type Backend = 'rigctld' | 'hamlib'
   let radioBackend: Backend = 'rigctld'
-  let rictgldHost = $rigHost || 'localhost'
+  let rigctldHost = $rigHost || 'localhost'
   let rigctldPort = $rigPort || 4532
   let showRigctldGuide = false
 
@@ -159,7 +159,7 @@
       input_device:      inputDevice || null,
       output_device:     outputDevice || null,
       radio_backend:     radioBackend,
-      rigctld_host:      radioBackend === 'rigctld' ? rictgldHost : 'localhost',
+      rigctld_host:      radioBackend === 'rigctld' ? rigctldHost : 'localhost',
       rigctld_port:      radioBackend === 'rigctld' ? rigctldPort : 4532,
       rig_model:         radioBackend === 'hamlib' ? rigModel : null,
       serial_port:       radioBackend === 'hamlib' ? (serialPort || null) : null,
@@ -312,7 +312,7 @@
 
           <label>
             rigctld Host
-            <input bind:value={rictgldHost} placeholder="localhost" />
+            <input bind:value={rigctldHost} placeholder="localhost" />
           </label>
 
           <label>
@@ -381,7 +381,7 @@
             <tr><td>Audio output</td><td>{outputDevice || '(system default)'}</td></tr>
             <tr><td>Radio backend</td><td>{radioBackend}</td></tr>
             {#if radioBackend === 'rigctld'}
-              <tr><td>rigctld host</td><td>{rictgldHost}:{rigctldPort}</td></tr>
+              <tr><td>rigctld host</td><td>{rigctldHost}:{rigctldPort}</td></tr>
             {:else}
               <tr><td>Rig model</td><td>{rigModel}</td></tr>
               <tr><td>Serial port</td><td>{serialPort || '(none)'}</td></tr>

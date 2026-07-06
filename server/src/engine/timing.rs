@@ -1,14 +1,14 @@
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
 
-use crate::engine::{logger, qso};
+use crate::dsp::ft8::DecodedMessage;
 use crate::engine::qso::QsoState;
+use crate::engine::{logger, qso};
 use crate::radio::RadioCommand;
 use crate::state::{DecodeResult, LogEntryData, QsoUpdate, SharedState, TxRequest};
-use crate::dsp::ft8::DecodedMessage;
 
 /// Rolling audio buffer shared between the audio callback and this engine.
 pub type AudioBuf = Arc<std::sync::Mutex<Vec<f32>>>;
@@ -21,28 +21,32 @@ pub type AudioBuf = Arc<std::sync::Mutex<Vec<f32>>>;
 pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
     loop {
         // ---- Calculate the next active period start -------------------------
-        let now      = Utc::now();
+        let now = Utc::now();
         let now_secs = now.timestamp();
 
-        let period_start   = (now_secs / 15) * 15;
-        let decode_ts      = period_start + 13;
+        let period_start = (now_secs / 15) * 15;
+        let decode_ts = period_start + 13;
         // If decode time is already past, aim at the next period.
-        let active_start   = if now_secs >= decode_ts { period_start + 15 } else { period_start };
+        let active_start = if now_secs >= decode_ts {
+            period_start + 15
+        } else {
+            period_start
+        };
         let active_decode_ts = active_start + 13;
 
-        let period_parity  = ((active_start / 15) % 2) as u8;          // 0 = even, 1 = odd
+        let period_parity = ((active_start / 15) % 2) as u8; // 0 = even, 1 = odd
         let desired_parity = state.desired_tx_parity.load(Ordering::Relaxed) as u8; // false=0, true=1
 
         // ---- TX path --------------------------------------------------------
         let tx_enabled = state.tx_enabled.load(Ordering::Relaxed);
-        let parity_ok  = period_parity == desired_parity;
-        let has_queue  = state.tx_queue.lock().await.is_some();
+        let parity_ok = period_parity == desired_parity;
+        let has_queue = state.tx_queue.lock().await.is_some();
 
         if tx_enabled && parity_ok && has_queue {
             // --- Sleep until 200 ms before period start ----------------------
-            let pre_ptt_ms  = active_start * 1000 - 200;
-            let now_ms      = Utc::now().timestamp_millis();
-            let sleep_pre   = (pre_ptt_ms - now_ms).max(0) as u64;
+            let pre_ptt_ms = active_start * 1000 - 200;
+            let now_ms = Utc::now().timestamp_millis();
+            let sleep_pre = (pre_ptt_ms - now_ms).max(0) as u64;
             tokio::time::sleep(Duration::from_millis(sleep_pre)).await;
 
             // Safety: if we are already more than 1 s into the period, skip TX
@@ -56,14 +60,25 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
                 // Fall through to the decode path below.
             } else {
                 do_tx(&state, active_start).await;
-                // TX ran — skip decode for this TX period.
+                // TX ran — skip decode for this TX period.  do_tx returns at
+                // roughly T+12.75, still before this period's decode time
+                // (T+13), so a plain `continue` would resolve `active_start` to
+                // the SAME period and decode our own transmission (running the
+                // QSO advance twice per cycle).  Sleep just past this period's
+                // decode instant so the next iteration targets the next (RX)
+                // period.
+                let now_ms = Utc::now().timestamp_millis();
+                let past_decode_ms = (active_decode_ts * 1000 + 500) - now_ms;
+                if past_decode_ms > 0 {
+                    tokio::time::sleep(Duration::from_millis(past_decode_ms as u64)).await;
+                }
                 continue;
             }
         }
 
         // ---- Sleep until decode time ----------------------------------------
-        let now_ms     = Utc::now().timestamp_millis();
-        let sleep_dec  = (active_decode_ts * 1000 - now_ms).max(0) as u64;
+        let now_ms = Utc::now().timestamp_millis();
+        let sleep_dec = (active_decode_ts * 1000 - now_ms).max(0) as u64;
         tracing::debug!(
             "Next decode at T+13 of period {} (in {:.1}s)",
             active_start,
@@ -91,7 +106,8 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
 
         tracing::info!(
             "FT8 decode: period={} samples={} ({:.1}s)",
-            period, samples.len(),
+            period,
+            samples.len(),
             samples.len() as f32 / sample_rate as f32
         );
 
@@ -101,8 +117,15 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
                 .await
                 .unwrap_or_default();
 
-        tracing::info!("FT8 decoded {} message(s) for period {}", decoded.len(), period);
-        let result = DecodeResult { period, messages: decoded.clone() };
+        tracing::info!(
+            "FT8 decoded {} message(s) for period {}",
+            decoded.len(),
+            period
+        );
+        let result = DecodeResult {
+            period,
+            messages: decoded.clone(),
+        };
         let _ = state.decode_tx.send(result.clone());
         // Cache for initial state sync to newly connected clients
         {
@@ -121,9 +144,18 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
             let pre_qso_info = {
                 let qso_guard = state.qso.lock().await;
                 match &*qso_guard {
-                    QsoState::InQso { their_call, their_grid, their_report, my_report, .. } => {
-                        Some((their_call.clone(), their_grid.clone(), *their_report, *my_report))
-                    }
+                    QsoState::InQso {
+                        their_call,
+                        their_grid,
+                        their_report,
+                        my_report,
+                        ..
+                    } => Some((
+                        their_call.clone(),
+                        their_grid.clone(),
+                        *their_report,
+                        *my_report,
+                    )),
                     _ => None,
                 }
             };
@@ -134,12 +166,14 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
             };
 
             // Log QSO if it just completed.
-            if pre_qso_info.is_some() && next_msg.is_none() {
-                let new_state = state.qso.lock().await;
-                if matches!(&*new_state, QsoState::Complete { .. }) {
-                    let (their_call, their_grid, their_report, my_report) = pre_qso_info.unwrap();
-                    drop(new_state); // release lock before I/O
-                    maybe_log_qso(&state, their_call, their_grid, their_report, my_report).await;
+            if let Some((their_call, their_grid, their_report, my_report)) = pre_qso_info {
+                if next_msg.is_none() {
+                    let new_state = state.qso.lock().await;
+                    if matches!(&*new_state, QsoState::Complete { .. }) {
+                        drop(new_state); // release lock before I/O
+                        maybe_log_qso(&state, their_call, their_grid, their_report, my_report)
+                            .await;
+                    }
                 }
             }
 
@@ -149,7 +183,9 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
                 let msg2 = msg.clone();
                 match tokio::task::spawn_blocking(move || {
                     crate::dsp::ft8::encode(&msg2, tx_freq, sr)
-                }).await {
+                })
+                .await
+                {
                     Ok(Ok(samples)) => {
                         // Queue for the next period (opposite parity)
                         *state.tx_queue.lock().await = Some(TxRequest {
@@ -159,7 +195,7 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
                         tracing::info!("QSO: queued TX for next period: {}", msg);
                     }
                     Ok(Err(e)) => tracing::error!("QSO encode error: {e}"),
-                    Err(e)    => tracing::error!("QSO encode task error: {e}"),
+                    Err(e) => tracing::error!("QSO encode task error: {e}"),
                 }
             } else {
                 // QSO returned None (idle or complete) — nothing more to send
@@ -168,13 +204,13 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
 
         // ---- Broadcast QSO update -------------------------------------------
         {
-            let qso   = state.qso.lock().await;
+            let qso = state.qso.lock().await;
             let guard = state.tx_queue.lock().await;
             let update = QsoUpdate {
-                state:      qso.clone(),
-                next_tx:    guard.as_ref().map(|r| r.message.clone()),
+                state: qso.clone(),
+                next_tx: guard.as_ref().map(|r| r.message.clone()),
                 tx_enabled: state.tx_enabled.load(Ordering::Relaxed),
-                tx_queued:  guard.is_some(),
+                tx_queued: guard.is_some(),
             };
             let _ = state.qso_tx.send(update);
         }
@@ -183,22 +219,29 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
 
 /// Write an ADIF log entry and broadcast a LogEntry message to all clients.
 async fn maybe_log_qso(
-    state:        &SharedState,
-    their_call:   String,
-    their_grid:   Option<String>,
+    state: &SharedState,
+    their_call: String,
+    their_grid: Option<String>,
     their_report: Option<i32>,
-    my_report:    Option<i32>,
+    my_report: Option<i32>,
 ) {
     let freq_hz = state.last_radio_status.lock().await.freq;
     let (my_call, my_grid, log_file) = {
         let cfg = state.config.read().unwrap();
-        (cfg.station.callsign.clone(), cfg.station.grid.clone(), cfg.station.log_file.clone())
+        (
+            cfg.station.callsign.clone(),
+            cfg.station.grid.clone(),
+            cfg.station.log_file.clone(),
+        )
     };
 
     let now = Utc::now();
     let qso_start = state.qso_start.lock().unwrap().unwrap_or(now);
 
-    let fmt_snr = |v: Option<i32>| v.map(|r| format!("{:+03}", r.clamp(-99, 99))).unwrap_or_else(|| "+00".to_string());
+    let fmt_snr = |v: Option<i32>| {
+        v.map(|r| format!("{:+03}", r.clamp(-99, 99)))
+            .unwrap_or_else(|| "+00".to_string())
+    };
     let rst_sent = fmt_snr(my_report);
     let rst_rcvd = fmt_snr(their_report);
 
@@ -229,8 +272,8 @@ async fn maybe_log_qso(
         rst_rcvd,
         freq_hz,
         band,
-        date:     qso_start.format("%Y%m%d").to_string(),
-        time_on:  qso_start.format("%H%M%S").to_string(),
+        date: qso_start.format("%Y%m%d").to_string(),
+        time_on: qso_start.format("%H%M%S").to_string(),
     };
     let _ = state.log_tx.send(log_data);
 
@@ -245,7 +288,7 @@ async fn do_tx(state: &SharedState, period_start: i64) {
     // --- Take the queued audio -----------------------------------------------
     let request = match state.tx_queue.lock().await.take() {
         Some(r) => r,
-        None    => return,
+        None => return,
     };
 
     tracing::info!("TX start: \"{}\"", request.message);
@@ -254,6 +297,14 @@ async fn do_tx(state: &SharedState, period_start: i64) {
     let now_ms = Utc::now().timestamp_millis();
     let sleep_ms = (period_start * 1000 - now_ms).max(0) as u64;
     tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
+
+    // --- Re-check TX enable after the sleep ----------------------------------
+    // A HaltTx during the pre-period wait clears `tx_enabled`; honour it here so
+    // we neither key the transmitter nor start playback for a cancelled TX.
+    if !state.tx_enabled.load(Ordering::Relaxed) {
+        tracing::info!("TX aborted: tx disabled during pre-period wait");
+        return;
+    }
 
     // --- Assert PTT ----------------------------------------------------------
     let _ = state.radio_cmd_tx.send(RadioCommand::SetPtt(true)).await;

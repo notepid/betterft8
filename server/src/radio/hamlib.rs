@@ -4,6 +4,50 @@ use tokio::net::TcpStream;
 
 use super::RadioBackend;
 
+/// Allowlist of valid Hamlib mode strings.  Any value not matched here is
+/// rejected before it reaches the rigctld protocol, preventing command
+/// injection via embedded newlines / whitespace.
+fn is_valid_mode(mode: &str) -> bool {
+    matches!(
+        mode,
+        "USB"
+            | "LSB"
+            | "CW"
+            | "CWR"
+            | "RTTY"
+            | "RTTYR"
+            | "AM"
+            | "FM"
+            | "WFM"
+            | "AMS"
+            | "PKTUSB"
+            | "PKTLSB"
+            | "PKTFM"
+            | "PKTAM"
+            | "ECSSUSB"
+            | "ECSSLSB"
+            | "FA"
+            | "SAM"
+            | "SAL"
+            | "SAH"
+            | "DSB"
+            | "FMN"
+            | "SPEC"
+            | "CWN"
+            | "FSK"
+            | "FSKR"
+            | "P25"
+            | "DSTAR"
+            | "DPMR"
+            | "NXDNVN"
+            | "NXDNN"
+            | "DCR"
+            | "AMN"
+            | "PSK"
+            | "PSKR"
+    )
+}
+
 pub struct RigCtld {
     reader: BufReader<tokio::net::tcp::OwnedReadHalf>,
     writer: tokio::net::tcp::OwnedWriteHalf,
@@ -52,7 +96,6 @@ impl RigCtld {
             lines.push(trimmed);
         }
     }
-
 }
 
 impl RadioBackend for RigCtld {
@@ -89,7 +132,14 @@ impl RadioBackend for RigCtld {
     }
 
     async fn set_mode(&mut self, mode: &str, passband: i32) -> Result<()> {
-        self.send_command(&format!("+M {} {}", mode, passband)).await?;
+        // `mode` is client-supplied; reject anything not on the Hamlib mode
+        // allowlist so an embedded newline cannot inject extra rigctld commands
+        // and desync response parsing.
+        if !is_valid_mode(mode) {
+            return Err(anyhow!("invalid rig mode: {:?}", mode));
+        }
+        self.send_command(&format!("+M {} {}", mode, passband))
+            .await?;
         Ok(())
     }
 
@@ -104,7 +154,8 @@ impl RadioBackend for RigCtld {
     }
 
     async fn set_ptt(&mut self, on: bool) -> Result<()> {
-        self.send_command(&format!("+T {}", if on { 1 } else { 0 })).await?;
+        self.send_command(&format!("+T {}", if on { 1 } else { 0 }))
+            .await?;
         Ok(())
     }
 }

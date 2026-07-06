@@ -1,11 +1,14 @@
 <script lang="ts">
-  import { radioStatus, qsoUpdate, myRole, txFreq } from '../lib/stores'
+  import { radioStatus, qsoUpdate, myRole, txFreq, connected, commandError } from '../lib/stores'
   import { client } from '../lib/websocket'
 
   $: txEnabled = $qsoUpdate?.tx_enabled ?? false
   $: transmitting = $radioStatus?.ptt ?? false
   $: txQueued = $qsoUpdate?.tx_queued ?? false
   $: isOperator = $myRole === 'operator'
+  // TX-affecting controls require an operator AND a live connection; a command
+  // sent over a dead socket is silently dropped, so disable rather than mislead.
+  $: canControl = isOperator && $connected
 
   // Parity: false = even (0,30s), true = odd (15,45s)
   let parityOdd = false
@@ -37,7 +40,7 @@
 <div class="controls">
   <!-- TX Enable toggle -->
   <label class="toggle-label" title={isOperator ? 'Enable/disable automatic TX' : 'Claim operator to control TX'}>
-    <input type="checkbox" checked={txEnabled} onchange={toggleTx} disabled={!isOperator} />
+    <input type="checkbox" checked={txEnabled} onchange={toggleTx} disabled={!canControl} />
     <span class="toggle-text">TX {txEnabled ? 'ON' : 'OFF'}</span>
   </label>
 
@@ -61,13 +64,13 @@
       class="parity-btn"
       class:active={!parityOdd}
       onclick={() => setParity(false)}
-      disabled={!isOperator}
+      disabled={!canControl}
     >Even</button>
     <button
       class="parity-btn"
       class:active={parityOdd}
       onclick={() => setParity(true)}
-      disabled={!isOperator}
+      disabled={!canControl}
     >Odd</button>
   </div>
 
@@ -75,24 +78,24 @@
   <button
     class="btn btn-cq"
     onclick={callCq}
-    disabled={transmitting || !isOperator}
-    title={isOperator ? 'Call CQ on TX frequency' : 'Claim operator to control TX'}
+    disabled={transmitting || !canControl}
+    title={!$connected ? 'Disconnected — cannot transmit' : isOperator ? 'Call CQ on TX frequency' : 'Claim operator to control TX'}
   >Call CQ</button>
 
   <!-- Halt TX -->
   <button
     class="btn btn-halt"
     onclick={haltTx}
-    disabled={!isOperator}
-    title={isOperator ? 'Emergency stop TX' : 'Claim operator to control TX'}
+    disabled={!canControl}
+    title={!$connected ? 'Disconnected — cannot transmit' : isOperator ? 'Emergency stop TX' : 'Claim operator to control TX'}
   >Halt TX</button>
 
   <!-- Reset QSO -->
   <button
     class="btn btn-reset"
     onclick={resetQso}
-    disabled={!isOperator}
-    title={isOperator ? 'Clear QSO state and stop TX' : 'Claim operator to control TX'}
+    disabled={!canControl}
+    title={!$connected ? 'Disconnected — cannot transmit' : isOperator ? 'Clear QSO state and stop TX' : 'Claim operator to control TX'}
   >Reset</button>
 
   <!-- TX status badge -->
@@ -100,6 +103,11 @@
     <span class="tx-badge">TX</span>
   {:else if txQueued}
     <span class="queued-badge">QUEUED</span>
+  {/if}
+
+  <!-- Command send failure (e.g. socket down) -->
+  {#if $commandError}
+    <span class="cmd-error">{$commandError}</span>
   {/if}
 </div>
 
@@ -253,6 +261,12 @@
     font-size: 0.7rem;
     border-radius: 3px;
     padding: 0.1rem 0.4rem;
+  }
+
+  .cmd-error {
+    color: #f08080;
+    font-size: 0.75rem;
+    font-weight: bold;
   }
 
   @keyframes blink {
