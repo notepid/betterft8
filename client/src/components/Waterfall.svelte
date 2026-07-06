@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
-  import { decodes, selectedDecode, waterfallLine, waterfallScheme, waterfallFloor, waterfallCeiling, waterfallAutoLevel, txFreq } from '../lib/stores'
+  import { decodes, selectedDecode, waterfallLine, waterfallScheme, waterfallFloor, waterfallCeiling, waterfallAutoLevel, txFreq, theme } from '../lib/stores'
   import type { Decode } from '../lib/stores'
   import { callerCall } from '../lib/callsign'
   import type { WaterfallMessage } from '../lib/messages'
@@ -9,6 +9,32 @@
   let canvas: HTMLCanvasElement
   let imageData: ImageData | null = null
   let currentFreqMax = 5000
+
+  // Canvas draw colours. The canvas can't use CSS variables directly, so we read
+  // the domain tokens from app.css at mount and mirror them here — this keeps the
+  // overlay/TX-band colours in sync with whatever palette is active (no drift).
+  let CQ_COLOR = '#8fbf5f' // fallback = --cq
+  let TX_BAND_COLOR = '#ff7043' // fallback = --tx-active
+  function syncCanvasColours() {
+    const cs = getComputedStyle(document.documentElement)
+    CQ_COLOR = cs.getPropertyValue('--cq').trim() || CQ_COLOR
+    TX_BAND_COLOR = cs.getPropertyValue('--tx-active').trim() || TX_BAND_COLOR
+  }
+  // The canvas background well uses --waterfall-bg via CSS on .waterfall-wrap.
+
+  // Re-read the palette when the theme changes. requestAnimationFrame defers the
+  // read until after the new `data-theme` attribute has been applied to the DOM,
+  // so getComputedStyle sees the new token values. The overlay/TX band redraw
+  // every frame, so the refreshed colours take effect on the next line.
+  $: if ($theme) requestAnimationFrame(syncCanvasColours)
+
+  // Apply an alpha to one of the hex domain colours for canvas fills/strokes.
+  function withAlpha(hex: string, alpha: number): string {
+    const r = parseInt(hex.slice(1, 3), 16)
+    const g = parseInt(hex.slice(3, 5), 16)
+    const b = parseInt(hex.slice(5, 7), 16)
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }
 
   // Overlay: decodes from the most-recent period(s), up to ~30 s old.
   let overlayDecodes: Array<{ freq: number; message: string; period: number }> = []
@@ -38,12 +64,23 @@
   let smoothCeiling = 255
   let autoLevelInitialized = false
 
-  function autoLevel(srcArr: Uint8Array) {
+  // Change-guard: last rounded dB values actually pushed to the stores, so we
+  // only write (and rebuild the remap LUT / re-render the sliders) on a change.
+  let lastFloorDb = NaN
+  let lastCeilingDb = NaN
+
+  // Persistent scratch buffers reused across frames to avoid per-frame allocs.
+  const histScratch = new Uint32Array(256)
+  let scratchSrc = new Uint8Array(0)
+  let frameCount = 0
+
+  function autoLevel(srcArr: Uint8Array, numBins: number) {
     if (!$waterfallAutoLevel) return
 
-    // Build a simple histogram
-    const hist = new Uint32Array(256)
-    for (let i = 0; i < srcArr.length; i++) {
+    // Build a simple histogram (reuse the persistent buffer)
+    const hist = histScratch
+    hist.fill(0)
+    for (let i = 0; i < numBins; i++) {
       hist[srcArr[i]]++
     }
 
@@ -58,7 +95,7 @@
     }
 
     // Find P95 of the distribution (signal level estimate)
-    const total = srcArr.length
+    const total = numBins
     let cumulative = 0
     let p95Bin = 255
     for (let i = 0; i < 256; i++) {
@@ -79,17 +116,29 @@
     smoothCeiling = smoothCeiling + alpha * (targetCeiling - smoothCeiling)
     autoLevelInitialized = true
 
-    // Convert u8 back to dB for the store
-    const floorDb = Math.round((smoothFloor / 255) * 120 - 120)
-    const ceilingDb = Math.round((smoothCeiling / 255) * 120 - 120)
+    // Convert u8 back to dB and clamp to the slider ranges
+    const floorDb = Math.max(-120, Math.min(-1, Math.round((smoothFloor / 255) * 120 - 120)))
+    const ceilingDb = Math.max(-119, Math.min(0, Math.round((smoothCeiling / 255) * 120 - 120)))
 
-    waterfallFloor.set(Math.max(-120, Math.min(-1, floorDb)))
-    waterfallCeiling.set(Math.max(-119, Math.min(0, ceilingDb)))
+    // Only write when the rounded value actually changed — avoids ~20 store
+    // writes/sec that would otherwise rebuild the remap LUT and re-render the
+    // bound sliders/labels every frame for no visible difference.
+    if (floorDb !== lastFloorDb) {
+      lastFloorDb = floorDb
+      waterfallFloor.set(floorDb)
+    }
+    if (ceilingDb !== lastCeilingDb) {
+      lastCeilingDb = ceilingDb
+      waterfallCeiling.set(ceilingDb)
+    }
   }
 
-  // Reset smoothing when auto-level is toggled on
+  // Reset smoothing (and the change-guard) when auto-level is toggled on so the
+  // first frame re-initialises and force-writes the freshly computed levels.
   $: if ($waterfallAutoLevel) {
     autoLevelInitialized = false
+    lastFloorDb = NaN
+    lastCeilingDb = NaN
   }
 
   function buildColorLut(scheme: string): Uint8ClampedArray {
@@ -162,16 +211,26 @@
       }
     }
 
-    // Decode base64 → Uint8Array
+    // Decode base64 → Uint8Array (reuse the scratch buffer, grow only if needed)
     const binaryStr = atob(msg.data)
-    const srcArr = new Uint8Array(binaryStr.length)
-    for (let i = 0; i < binaryStr.length; i++) {
+    const numBins = binaryStr.length
+    if (scratchSrc.length < numBins) {
+      scratchSrc = new Uint8Array(numBins)
+    }
+    const srcArr = scratchSrc
+    for (let i = 0; i < numBins; i++) {
       srcArr[i] = binaryStr.charCodeAt(i)
     }
-    const numBins = srcArr.length
 
-    // Auto-level: adapt floor/ceiling from signal statistics
-    autoLevel(srcArr)
+    // Auto-level: adapt floor/ceiling from signal statistics. The recompute is
+    // throttled to ~1 Hz (every 10th ~100ms frame); the smoothing alpha is small
+    // so the slower adaptation is visually identical. The first frame after
+    // enabling always runs so levels initialise immediately. Drawing below still
+    // happens every frame.
+    if ($waterfallAutoLevel && (!autoLevelInitialized || frameCount % 10 === 0)) {
+      autoLevel(srcArr, numBins)
+    }
+    frameCount++
 
     // Scroll existing rows down by one row
     imageData.data.copyWithin(w * 4, 0)
@@ -225,7 +284,7 @@
 
       const x = Math.round((d.freq / freqMax) * w)
       const isCq = d.message.toUpperCase().startsWith('CQ ')
-      const color = isCq ? `rgba(0,255,136,${alpha})` : `rgba(255,255,200,${alpha * 0.9})`
+      const color = isCq ? withAlpha(CQ_COLOR, alpha) : `rgba(255,255,200,${alpha * 0.9})`
 
       // Vertical tick mark below the freq axis
       ctx.strokeStyle = color
@@ -254,12 +313,12 @@
 
     ctx.save()
 
-    // Semitransparent band fill — bright magenta for visibility
-    ctx.fillStyle = 'rgba(255, 0, 200, 0.18)'
+    // Semitransparent band fill — the "on the air" TX colour for visibility
+    ctx.fillStyle = withAlpha(TX_BAND_COLOR, 0.18)
     ctx.fillRect(xLo, 0, bandW, h)
 
     // Solid edge lines (thick for visibility)
-    ctx.strokeStyle = 'rgba(255, 50, 220, 0.9)'
+    ctx.strokeStyle = withAlpha(TX_BAND_COLOR, 0.9)
     ctx.lineWidth = 2
     ctx.beginPath()
     ctx.moveTo(xLo + 0.5, 0)
@@ -272,7 +331,7 @@
 
     // Labels at bottom showing lower and upper frequencies
     ctx.font = '10px monospace'
-    ctx.fillStyle = 'rgba(255, 120, 240, 0.95)'
+    ctx.fillStyle = withAlpha(TX_BAND_COLOR, 0.95)
     const loLabel = `${freqLo}`
     const hiLabel = `${freqHi}`
     const loTextW = ctx.measureText(loLabel).width
@@ -315,17 +374,63 @@
   }
 
   onMount(() => {
-    const updateSize = () => {
-      const newW = canvas.clientWidth
-      if (newW > 0 && newW !== canvas.width) {
-        canvas.width = newW
+    syncCanvasColours()
+    // Resize the backing store to match the box, PRESERVING the spectrogram.
+    // History is kept as the working `imageData` buffer; on a resize we allocate
+    // a new buffer at the new dimensions and copy the retained pixels in,
+    // anchored to the TOP-LEFT so the newest row (row 0) stays put — growing the
+    // cell reveals more empty time-history at the bottom (which fills as new
+    // lines scroll down), shrinking it clips the oldest rows. Never blanks.
+    const resizeCanvas = () => {
+      if (!canvas) return
+      const newW = Math.max(1, Math.floor(canvas.clientWidth))
+      const newH = Math.max(1, Math.floor(canvas.clientHeight))
+      if (newW === canvas.width && newH === canvas.height) return
+
+      const ctx = canvas.getContext('2d')
+      const oldImage = imageData // retained spectrogram pixels (null until 1st line)
+      const oldW = canvas.width
+      const oldH = canvas.height
+
+      canvas.width = newW
+      canvas.height = newH
+
+      if (!ctx) {
         imageData = null
+        return
       }
+
+      // Reallocate the working buffer at the new size and seed opaque alpha.
+      const next = ctx.createImageData(newW, newH)
+      const d = next.data
+      for (let i = 3; i < d.length; i += 4) d[i] = 255
+
+      // Copy retained history anchored to the top (newest row stays at row 0).
+      if (oldImage) {
+        const src = oldImage.data
+        const copyH = Math.min(oldH, newH)
+        const copyRowBytes = Math.min(oldW, newW) * 4
+        for (let y = 0; y < copyH; y++) {
+          const srcRow = y * oldW * 4
+          const dstRow = y * newW * 4
+          for (let x = 0; x < copyRowBytes; x++) {
+            d[dstRow + x] = src[srcRow + x]
+          }
+        }
+      }
+
+      imageData = next
+      ctx.putImageData(next, 0, 0)
     }
 
-    updateSize()
+    resizeCanvas()
 
-    const ro = new ResizeObserver(updateSize)
+    // Debounce the observer so dragging a resize doesn't re-init every frame.
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined
+    const ro = new ResizeObserver(() => {
+      if (resizeTimer !== undefined) clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(resizeCanvas, 150)
+    })
     ro.observe(canvas)
 
     const unsubWaterfall = waterfallLine.subscribe((line) => {
@@ -345,6 +450,7 @@
     return () => {
       unsubWaterfall()
       unsubDecodes()
+      if (resizeTimer !== undefined) clearTimeout(resizeTimer)
       ro.disconnect()
     }
   })
@@ -353,22 +459,38 @@
 <div class="waterfall-wrap">
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <canvas bind:this={canvas} height="300" on:click={handleCanvasClick}></canvas>
+  <canvas bind:this={canvas} on:click={handleCanvasClick}></canvas>
+  <p class="waterfall-caption">Click to set TX frequency · click a callsign to reply</p>
 </div>
 
 <style>
   .waterfall-wrap {
+    display: flex;
+    flex-direction: column;
     width: 100%;
-    background: #000;
-    border: 1px solid #2a2a4a;
-    border-radius: 4px;
+    height: 100%;
+    min-height: 0;
+    background: var(--waterfall-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     overflow: hidden;
   }
 
   canvas {
     display: block;
+    flex: 1 1 auto;
     width: 100%;
-    height: 300px;
+    min-height: 0;
     cursor: crosshair;
+  }
+
+  .waterfall-caption {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: var(--sp-1) var(--sp-2);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: var(--fs-100);
+    line-height: var(--lh-tight);
   }
 </style>

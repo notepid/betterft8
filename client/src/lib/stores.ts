@@ -10,6 +10,36 @@ import type {
 } from './messages'
 
 export const connected = writable(false)
+
+/** Fine-grained link state for UI feedback. `reconnecting` is set during backoff
+ * between a drop and the next open attempt. */
+export type ConnectionState = 'connected' | 'reconnecting' | 'disconnected'
+export const connectionState = writable<ConnectionState>('disconnected')
+
+/** True while the link is down and the last-known QSO/radio snapshot on screen is
+ * therefore stale. The UI dims (rather than blanks) affected panels. */
+export const dataStale = writable<boolean>(false)
+
+// ---- Transient notifications (toast layer) ----------------------------------
+
+export type Severity = 'info' | 'success' | 'error'
+export type Notification = { id: number; severity: Severity; message: string }
+export const notifications = writable<Notification[]>([])
+
+let notifySeq = 0
+/** Push a transient toast. Errors persist longer; all auto-expire. Use this for
+ * server errors, command failures, and config/test results — NOT for auth/claim
+ * failures (those stay inline via {@link authError}). */
+export function notify(severity: Severity, message: string, ttlMs = severity === 'error' ? 6000 : 3500) {
+  const id = notifySeq++
+  notifications.update((n) => [...n, { id, severity, message }])
+  setTimeout(() => dismissNotification(id), ttlMs)
+  return id
+}
+export function dismissNotification(id: number) {
+  notifications.update((n) => n.filter((x) => x.id !== id))
+}
+
 export const lastMessage = writable<ServerMessage | null>(null)
 /** Set when a command could not be sent (e.g. socket down); cleared on reconnect. */
 export const commandError = writable<string | null>(null)
@@ -60,6 +90,46 @@ export function addDecodes(period: number, entries: Array<{ snr: number; dt: num
 // Decode that the user has clicked to respond to
 export const selectedDecode = writable<Decode | null>(null)
 
+// ---- Theme ------------------------------------------------------------------
+
+/** Selectable UI theme. "graphite" is the base :root palette (no data-theme
+ * attribute); the others map to `:root[data-theme="…"]` override blocks. */
+export type Theme = 'graphite' | 'slate' | 'phosphor' | 'light'
+
+/** Themes offered in the picker, with human-readable labels. */
+export const THEMES: { value: Theme; label: string }[] = [
+  { value: 'graphite', label: 'Graphite & Amber' },
+  { value: 'slate', label: 'Slate & Teal' },
+  { value: 'phosphor', label: 'Phosphor' },
+  { value: 'light', label: 'Light' },
+]
+
+const THEME_STORAGE_KEY = 'bft8-theme'
+
+function initialTheme(): Theme {
+  if (typeof localStorage === 'undefined') return 'graphite'
+  const stored = localStorage.getItem(THEME_STORAGE_KEY)
+  return THEMES.some((t) => t.value === stored) ? (stored as Theme) : 'graphite'
+}
+
+/** Active UI theme. Subscribing at module load applies the persisted value to
+ * the document root before first paint (avoids a flash of the default theme). */
+export const theme = writable<Theme>(initialTheme())
+
+theme.subscribe((value) => {
+  if (typeof document !== 'undefined') {
+    // "graphite" is the base :root — no attribute; others set data-theme.
+    if (value === 'graphite') {
+      document.documentElement.removeAttribute('data-theme')
+    } else {
+      document.documentElement.setAttribute('data-theme', value)
+    }
+  }
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(THEME_STORAGE_KEY, value)
+  }
+})
+
 // ---- Settings ---------------------------------------------------------------
 
 /** Whether the Settings panel is open. */
@@ -68,8 +138,9 @@ export const settingsOpen = writable<boolean>(false)
 /** Alert sound enabled (when callsign is heard). */
 export const alertEnabled = writable<boolean>(true)
 
-/** Waterfall color scheme. */
-export const waterfallScheme = writable<'classic' | 'greyscale' | 'heat'>('classic')
+/** Waterfall color scheme. Defaults to the warm "heat" map to harmonise with the
+ * amber chrome; users can switch to classic/greyscale in the waterfall controls. */
+export const waterfallScheme = writable<'classic' | 'greyscale' | 'heat'>('heat')
 
 /** Waterfall display floor in dB (-120 to 0). Values below this → black. */
 export const waterfallFloor = writable<number>(-120)

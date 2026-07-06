@@ -60,6 +60,15 @@
     && (selected.message.toUpperCase().startsWith('CQ '))
     && qsoState.state === 'idle'
 
+  // Explain why a selected decode can't be replied to, instead of showing
+  // nothing. null when there's nothing to explain (no selection or actionable).
+  $: notActionableReason = (() => {
+    if (!selected || canRespond) return null
+    if (!isOperator) return 'Claim operator to reply'
+    if (qsoState.state !== 'idle') return 'Already in a QSO — reset to reply'
+    return 'Select a CQ to reply'
+  })()
+
   function respond() {
     if (!selected) return
     const theirCall = callerCall(selected.message)
@@ -93,7 +102,7 @@
       <span class="step-label">{stepLabel(qsoState)}</span>
     {/if}
     {#if qsoState.state === 'complete'}
-      <span class="complete-badge">QSO COMPLETE</span>
+      <span class="badge badge--success">QSO COMPLETE</span>
     {/if}
   </div>
 
@@ -181,72 +190,75 @@
         Respond to <strong>{callerCall(selected.message)}</strong>
         @ {Math.round(selected.freq)} Hz?
       </span>
-      <button class="btn-respond" onclick={respond}>Respond</button>
-      <button class="btn-dismiss" onclick={() => selectedDecode.set(null)}>✕</button>
+      <button class="btn btn--primary" onclick={respond}>Respond</button>
+      <button class="btn btn--icon" onclick={() => selectedDecode.set(null)}>✕</button>
+    </div>
+  {:else if notActionableReason}
+    <!-- A decode is selected but can't be replied to — say why, don't go silent. -->
+    <div class="guidance-row">
+      <span class="guidance">{notActionableReason}</span>
+      <button class="btn btn--icon" onclick={() => selectedDecode.set(null)}>✕</button>
+    </div>
+  {:else if qsoState.state === 'idle'}
+    <!-- Idle with nothing selected: tell the operator how to start. -->
+    <div class="guidance-row">
+      <span class="guidance">Click a CQ in the list to reply, or press Call CQ to transmit.</span>
     </div>
   {/if}
 </div>
 
 <style>
   .qso-panel {
-    background: #111828;
-    border: 1px solid #2a2a5a;
-    border-radius: 4px;
-    padding: 0.4rem 0.75rem;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-2) var(--sp-3);
     display: flex;
     flex-direction: column;
-    gap: 0.3rem;
-    font-family: monospace;
-    font-size: 0.8rem;
+    gap: var(--sp-1);
+    font-size: var(--fs-200);
   }
 
   .state-row {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: var(--sp-3);
   }
 
   .state-label {
-    color: #666;
-    font-weight: bold;
+    color: var(--text-muted);
+    font-weight: var(--fw-bold);
   }
 
   .state-label.active {
-    color: #7ec8e3;
+    color: var(--accent);
   }
 
   .step-label {
-    color: #888;
-    font-size: 0.75rem;
-  }
-
-  .complete-badge {
-    background: #27ae60;
-    color: #fff;
-    font-size: 0.7rem;
-    padding: 0.1rem 0.4rem;
-    border-radius: 3px;
-    font-weight: bold;
+    color: var(--text-muted);
+    font-size: var(--fs-100);
   }
 
   .details-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
-    color: #c0c0d0;
+    gap: var(--sp-3);
+    color: var(--text-secondary);
   }
 
   .detail-item {
     display: flex;
-    gap: 0.3rem;
+    gap: var(--sp-1);
   }
 
   .detail-key {
-    color: #666;
+    color: var(--text-muted);
   }
 
   .detail-val {
-    color: #a8e0f0;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
   }
 
   .steps-row {
@@ -256,93 +268,87 @@
   }
 
   .step {
-    padding: 0.15rem 0.5rem;
-    border: 1px solid #2a2a5a;
-    color: #444;
-    font-size: 0.7rem;
-    border-radius: 2px;
-    margin-right: 0.2rem;
+    padding: 0.15rem var(--sp-2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: var(--fs-100);
+    border-radius: var(--radius-sm);
+    margin-right: var(--sp-1);
+  }
+
+  /* Non-colour cues so step progress survives colour-blindness. */
+  .step.done::before {
+    content: "\2713 ";
+  }
+
+  .step.current::before {
+    content: "\25CF ";
   }
 
   .step.done {
-    background: #1a3a2a;
-    color: #60c080;
-    border-color: #2a5a3a;
+    background: var(--success-bg);
+    color: var(--success-text);
+    border-color: var(--success-border);
   }
 
   .step.current {
-    background: #1a2a5a;
-    color: #80b0ff;
-    border-color: #3a5aaa;
-    font-weight: bold;
+    background: var(--surface-2);
+    color: var(--accent);
+    border-color: var(--accent);
+    font-weight: var(--fw-bold);
   }
 
   .next-tx-row {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--sp-2);
   }
 
   .next-tx-label {
-    color: #888;
+    color: var(--text-muted);
     white-space: nowrap;
   }
 
   .next-tx-input {
     flex: 1;
-    background: #0d0d2b;
-    border: 1px solid #f0c040;
-    border-radius: 3px;
-    color: #f0e080;
-    font-family: monospace;
-    font-size: 0.8rem;
-    padding: 0.15rem 0.35rem;
+    background: var(--bg-sunken);
+    border: 1px solid var(--warn);
+    border-radius: var(--radius-sm);
+    color: var(--warn-text);
+    font-family: var(--font-mono);
+    font-size: var(--fs-200);
+    padding: 0.15rem var(--sp-1);
   }
 
   .respond-row {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    background: #1a2a1a;
-    border: 1px solid #2a5a2a;
-    border-radius: 3px;
-    padding: 0.25rem 0.5rem;
+    gap: var(--sp-2);
+    background: var(--success-bg);
+    border: 1px solid var(--success-border);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-1) var(--sp-2);
   }
 
   .respond-info {
     flex: 1;
-    color: #90d890;
+    color: var(--success-text);
   }
 
   .respond-info strong {
-    color: #b0f8b0;
+    color: var(--success-text);
+    font-family: var(--font-mono);
   }
 
-  .btn-respond {
-    background: #1a5a1a;
-    border: 1px solid #2a8a2a;
-    color: #80e880;
-    font-family: monospace;
-    font-size: 0.78rem;
-    padding: 0.2rem 0.6rem;
-    border-radius: 3px;
-    cursor: pointer;
+  .guidance-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
   }
 
-  .btn-respond:hover {
-    background: #246a24;
-  }
-
-  .btn-dismiss {
-    background: none;
-    border: none;
-    color: #666;
-    cursor: pointer;
-    font-size: 0.8rem;
-    padding: 0.1rem 0.2rem;
-  }
-
-  .btn-dismiss:hover {
-    color: #aaa;
+  .guidance {
+    flex: 1;
+    color: var(--text-muted);
+    font-size: var(--fs-100);
   }
 </style>

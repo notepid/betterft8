@@ -11,13 +11,13 @@
     rigHost,
     rigPort,
     settingsOpen,
-    waterfallScheme,
-    waterfallFloor,
-    waterfallCeiling,
     logEntries,
     wizardOpen,
+    theme,
+    THEMES,
   } from '../lib/stores'
   import { client } from '../lib/websocket'
+  import { trapFocus } from '../lib/actions'
 
   // Local form state — initialised from stores when panel opens
   let editCallsign = ''
@@ -88,10 +88,16 @@
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div class="overlay" on:click|self={close}>
-    <aside class="panel">
+    <div
+      class="panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
+      use:trapFocus={{ onEscape: close }}
+    >
       <header class="panel-header">
-        <h2>Settings</h2>
-        <button class="close-btn" on:click={close}>✕</button>
+        <h2 id="settings-title">Settings</h2>
+        <button class="btn btn--icon" on:click={close}>✕</button>
       </header>
 
       <!-- Station -->
@@ -105,7 +111,7 @@
             bind:value={editCallsign}
             maxlength="13"
             disabled={$myRole !== 'operator'}
-            class="mono"
+            class="input mono"
           />
         </div>
         <div class="field-row">
@@ -116,21 +122,14 @@
             bind:value={editGrid}
             maxlength="6"
             disabled={$myRole !== 'operator'}
-            class="mono"
+            class="input mono"
           />
-        </div>
-        <div class="field-row">
-          <span class="field-label">Log file</span>
-          <span class="display-val">{$logFile}</span>
         </div>
         {#if $myRole === 'operator'}
           <div class="btn-row">
-            <button on:click={saveStation}>Save station</button>
+            <button class="btn btn--primary" on:click={saveStation}>Save station</button>
           </div>
         {/if}
-        <div class="btn-row">
-          <a href="/api/log" download="ft8.adi" class="dl-link">Download ADIF log</a>
-        </div>
       </section>
 
       <!-- Audio -->
@@ -138,7 +137,7 @@
         <h3>Audio</h3>
         <div class="field-row">
           <label for="s-input-dev">Input device</label>
-          <select id="s-input-dev" bind:value={editInputDevice} disabled={$myRole !== 'operator'}>
+          <select id="s-input-dev" class="input" bind:value={editInputDevice} disabled={$myRole !== 'operator'}>
             <option value="">(default)</option>
             {#each $deviceList.inputs as dev}
               <option value={dev}>{dev}</option>
@@ -147,7 +146,7 @@
         </div>
         <div class="field-row">
           <label for="s-output-dev">Output device</label>
-          <select id="s-output-dev" bind:value={editOutputDevice} disabled={$myRole !== 'operator'}>
+          <select id="s-output-dev" class="input" bind:value={editOutputDevice} disabled={$myRole !== 'operator'}>
             <option value="">(default)</option>
             {#each $deviceList.outputs as dev}
               <option value={dev}>{dev}</option>
@@ -156,7 +155,7 @@
         </div>
         {#if $myRole === 'operator'}
           <div class="btn-row">
-            <button on:click={saveAudio}>Save audio</button>
+            <button class="btn btn--primary" on:click={saveAudio}>Save audio</button>
           </div>
         {/if}
         <p class="note">Audio device changes require server restart.</p>
@@ -167,16 +166,16 @@
         <h3>Radio</h3>
         <div class="field-row">
           <label for="s-rig-host">rigctld host</label>
-          <input id="s-rig-host" type="text" bind:value={editRigHost} disabled={$myRole !== 'operator'} class="mono" />
+          <input id="s-rig-host" type="text" bind:value={editRigHost} disabled={$myRole !== 'operator'} class="input mono" />
         </div>
         <div class="field-row">
           <label for="s-rig-port">rigctld port</label>
-          <input id="s-rig-port" type="number" bind:value={editRigPort} min="1" max="65535" disabled={$myRole !== 'operator'} />
+          <input id="s-rig-port" type="number" bind:value={editRigPort} min="1" max="65535" disabled={$myRole !== 'operator'} class="input" />
         </div>
         {#if $myRole === 'operator'}
           <div class="btn-row">
-            <button on:click={saveRadio}>Save radio</button>
-            <button on:click={testRigctld} disabled={rigTestPending}>
+            <button class="btn btn--primary" on:click={saveRadio}>Save radio</button>
+            <button class="btn" on:click={testRigctld} disabled={rigTestPending}>
               {rigTestPending ? 'Testing…' : 'Test connection'}
             </button>
           </div>
@@ -195,7 +194,7 @@
           <h3>Setup Wizard</h3>
           <p class="note">Re-run the setup wizard to reconfigure your station, audio, and radio settings.</p>
           <div class="btn-row">
-            <button on:click={() => { wizardOpen.set(true); settingsOpen.set(false) }}>
+            <button class="btn" on:click={() => { wizardOpen.set(true); settingsOpen.set(false) }}>
               Open Setup Wizard
             </button>
           </div>
@@ -213,31 +212,38 @@
         </div>
       {/if}
 
-      <!-- Display -->
+      <!-- Appearance -->
       <section>
-        <h3>Display</h3>
+        <h3>Appearance</h3>
         <div class="field-row">
-          <label for="s-wf-scheme">Waterfall scheme</label>
-          <select id="s-wf-scheme" bind:value={$waterfallScheme}>
-            <option value="classic">Classic</option>
-            <option value="greyscale">Greyscale</option>
-            <option value="heat">Heat</option>
+          <label for="s-theme">Theme</label>
+          <select id="s-theme" class="input" bind:value={$theme}>
+            {#each THEMES as t}
+              <option value={t.value}>{t.label}</option>
+            {/each}
           </select>
         </div>
-        <div class="field-row">
-          <label for="s-wf-floor">WF floor</label>
-          <input id="s-wf-floor" type="range" min="-120" max="-1" step="1" bind:value={$waterfallFloor} />
-          <span class="level-val">{$waterfallFloor} dB</span>
-        </div>
-        <div class="field-row">
-          <label for="s-wf-ceil">WF ceiling</label>
-          <input id="s-wf-ceil" type="range" min="-119" max="0" step="1" bind:value={$waterfallCeiling} />
-          <span class="level-val">{$waterfallCeiling} dB</span>
-        </div>
+      </section>
+
+      <!-- Notifications -->
+      <section>
+        <h3>Notifications</h3>
         <label class="checkbox-row">
           <input type="checkbox" bind:checked={$alertEnabled} />
           Alert when callsign is heard
         </label>
+      </section>
+
+      <!-- Log -->
+      <section>
+        <h3>Log</h3>
+        <div class="field-row">
+          <span class="field-label">Log file</span>
+          <span class="display-val">{$logFile}</span>
+        </div>
+        <div class="btn-row">
+          <a href="/api/log" download="ft8.adi" class="dl-link">Download ADIF log</a>
+        </div>
       </section>
 
       <!-- Recent QSOs -->
@@ -265,7 +271,7 @@
           </div>
         </section>
       {/if}
-    </aside>
+    </div>
   </div>
 {/if}
 
@@ -280,25 +286,34 @@
   }
 
   .panel {
-    background: #1a1a2e;
-    border-left: 1px solid #2a2a4a;
+    background: var(--surface-1);
+    border-left: 1px solid var(--border);
+    box-shadow: var(--shadow-overlay);
     width: 380px;
     max-width: 100vw;
     height: 100%;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    font-family: monospace;
-    font-size: 0.82rem;
+    font-size: var(--fs-200);
+    /* Slide the drawer in from the right edge instead of popping in. */
+    transform: translateX(0);
+    transition: transform 0.2s ease;
+    animation: drawer-slide-in 0.2s ease;
+  }
+
+  @keyframes drawer-slide-in {
+    from { transform: translateX(100%); }
+    to   { transform: translateX(0); }
   }
 
   .panel-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid #2a2a4a;
-    background: #12122a;
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
     position: sticky;
     top: 0;
     z-index: 1;
@@ -306,29 +321,19 @@
 
   h2 {
     margin: 0;
-    font-size: 1rem;
-    color: #7ec8e3;
+    font-size: var(--fs-400);
+    color: var(--accent);
   }
-
-  .close-btn {
-    background: none;
-    border: none;
-    color: #888;
-    cursor: pointer;
-    font-size: 1rem;
-    padding: 0.2rem 0.4rem;
-  }
-  .close-btn:hover { color: #e0e0e0; }
 
   section {
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid #1e1e3a;
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--border);
   }
 
   h3 {
-    margin: 0 0 0.5rem;
-    font-size: 0.75rem;
-    color: #7ec8e3;
+    margin: 0 0 var(--sp-2);
+    font-size: var(--fs-100);
+    color: var(--accent);
     text-transform: uppercase;
     letter-spacing: 0.08em;
   }
@@ -336,42 +341,32 @@
   .field-row {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.4rem;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-1);
   }
 
   label,
   .field-label {
-    color: #8888aa;
+    color: var(--text-muted);
     min-width: 100px;
     flex-shrink: 0;
   }
 
-  input[type='text'],
-  input[type='number'],
-  select {
-    background: #0d0d1a;
-    border: 1px solid #2a2a4a;
-    color: #e0e0e0;
-    padding: 0.2rem 0.4rem;
-    border-radius: 3px;
-    font-family: monospace;
-    font-size: 0.82rem;
+  /* Form fields use the global .input primitive; only layout is local. */
+  .input {
     flex: 1;
     min-width: 0;
   }
-
-  input:disabled,
-  select:disabled {
+  .input:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
 
-  .mono { font-family: monospace; text-transform: uppercase; }
+  .mono { text-transform: uppercase; }
 
   .display-val {
-    color: #aaa;
-    font-family: monospace;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -379,76 +374,49 @@
 
   .btn-row {
     display: flex;
-    gap: 0.5rem;
-    margin-top: 0.4rem;
+    gap: var(--sp-2);
+    margin-top: var(--sp-1);
     flex-wrap: wrap;
   }
 
-  button {
-    background: #2a2a4a;
-    border: 1px solid #3a3a6a;
-    color: #e0e0e0;
-    padding: 0.25rem 0.6rem;
-    border-radius: 3px;
-    cursor: pointer;
-    font-family: monospace;
-    font-size: 0.8rem;
-  }
-  button:hover:not(:disabled) { background: #3a3a6a; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-
   .dl-link {
-    color: #7ec8e3;
+    color: var(--accent);
     text-decoration: none;
-    font-size: 0.8rem;
+    font-size: var(--fs-200);
   }
   .dl-link:hover { text-decoration: underline; }
 
   .note {
-    margin: 0.3rem 0 0;
-    color: #666688;
-    font-size: 0.75rem;
+    margin: var(--sp-1) 0 0;
+    color: var(--text-muted);
+    font-size: var(--fs-100);
   }
 
   .result-msg {
-    margin-top: 0.35rem;
-    padding: 0.2rem 0.4rem;
-    border-radius: 3px;
-    font-size: 0.78rem;
+    margin-top: var(--sp-1);
+    padding: var(--sp-1) var(--sp-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-100);
   }
-  .result-msg.ok { background: #0a2a0a; color: #66cc66; border: 1px solid #226622; }
-  .result-msg.err { background: #2a0a0a; color: #cc6666; border: 1px solid #662222; }
+  .result-msg.ok { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
+  .result-msg.err { background: var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-border); }
 
   .banner {
-    margin: 0.5rem 1rem;
-    padding: 0.3rem 0.6rem;
-    border-radius: 3px;
-    font-size: 0.8rem;
+    margin: var(--sp-2) var(--sp-4);
+    padding: var(--sp-1) var(--sp-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-200);
   }
-  .banner.ok { background: #0a2a0a; color: #66cc66; border: 1px solid #226622; }
-  .banner.err { background: #2a0a0a; color: #cc6666; border: 1px solid #662222; }
-
-  input[type='range'] {
-    flex: 1;
-    accent-color: #7ec8e3;
-    min-width: 0;
-  }
-
-  .level-val {
-    color: #aaa;
-    font-family: monospace;
-    white-space: nowrap;
-    min-width: 52px;
-    text-align: right;
-  }
+  .banner.ok { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
+  .banner.err { background: var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-border); }
 
   .checkbox-row {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    color: #c0c0d8;
+    gap: var(--sp-1);
+    color: var(--text-secondary);
     cursor: pointer;
-    margin-top: 0.3rem;
+    margin-top: var(--sp-1);
   }
 
   .log-table-wrap {
@@ -460,25 +428,27 @@
   .log-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.78rem;
+    font-size: var(--fs-100);
+    font-family: var(--font-mono);
   }
 
   .log-table th {
-    padding: 0.2rem 0.4rem;
-    color: #8888aa;
-    border-bottom: 1px solid #2a2a4a;
+    padding: var(--sp-1) var(--sp-2);
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
     text-align: left;
-    font-weight: normal;
+    font-weight: var(--fw-regular);
+    font-family: var(--font-ui);
     white-space: nowrap;
     position: sticky;
     top: 0;
-    background: #1a1a2e;
+    background: var(--surface-1);
   }
 
   .log-table td {
-    padding: 0.15rem 0.4rem;
-    border-bottom: 1px solid #14142a;
-    color: #c8c8e0;
+    padding: var(--sp-1) var(--sp-2);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
     white-space: nowrap;
   }
 </style>

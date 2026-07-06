@@ -1,0 +1,350 @@
+/*
+ * BetterFT8 design tokens + global primitives.
+ *
+ * Single source of truth for colour, type, spacing, and the shared component
+ * primitives (.btn, .badge, .card, form inputs). Components reference these
+ * tokens/classes instead of hardcoding values. No web fonts — CSP-safe system
+ * stacks only. The base :root is the default "Graphite & Amber" theme; alternate
+ * themes (slate, phosphor, light) are opt-in via [data-theme] on :root, set by
+ * the theme store from the persisted `bft8-theme` localStorage key.
+ */
+
+:root {
+  /* "Graphite & Amber" — warm charcoal surfaces with an analog-dial amber
+   * accent; a deliberately hand-picked, equipment-like palette (not the default
+   * indigo/neon-cyan look). Text contrast checked against --bg-base/--surface-1. */
+
+  /* ---- Surface / background layers (darkest -> lightest) ---- */
+  --bg-base: #141310;      /* app canvas */
+  --bg-sunken: #0e0d0a;    /* inputs, decode list, waterfall well */
+  --surface-1: #1d1b16;    /* primary panels */
+  --surface-2: #262318;    /* raised panels / sticky headers */
+  --surface-3: #322e22;    /* hover fills, inert buttons */
+
+  /* ---- Borders / hairlines ---- */
+  --border: #363024;
+  --border-strong: #4c4432;
+
+  /* ---- Text ---- */
+  --text-primary: #ece5d5;
+  --text-secondary: #c2b8a4;
+  --text-muted: #948a75;      /* AA floor for small text */
+  --text-disabled: #615a49;   /* non-text / off states only */
+
+  /* ---- Accent / brand (amber) ---- */
+  --accent: #e0a54a;
+  --accent-hover: #f2bd66;
+  --accent-ink: #1a1710;      /* text on a filled accent surface */
+
+  /* ---- Semantic ---- */
+  --success: #7fb069;
+  --success-bg: #18220f;
+  --success-border: #3a5230;
+  --success-text: #a8cf94;
+  --warn: #d99a34;
+  --warn-bg: #2a2210;
+  --warn-border: #5a4a1e;
+  --warn-text: #f0c877;
+  --danger: #cf5b4a;
+  --danger-bg: #2b1411;
+  --danger-border: #5c2a22;
+  --danger-text: #e89386;
+  --info: var(--accent);
+
+  /* ---- Domain-specific ---- */
+  --tx-active: #ff7043;                     /* the single "on the air" colour */
+  --tx-active-bg: rgba(255, 112, 67, 0.16);
+  --role-operator: var(--success);
+  --role-viewer: #a99b7d;
+  --cq: #8fbf5f;                            /* CQ rows + waterfall overlay */
+  --mycall: #f2c14e;                        /* my-call highlight */
+  --waterfall-bg: #000010;                  /* data surface; never themed */
+
+  /* ---- Radius / elevation ---- */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-pill: 999px;
+  --shadow-overlay: 0 8px 30px rgba(0, 0, 0, 0.5);
+
+  /* ---- Type ---- */
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", "Consolas", "Roboto Mono", monospace;
+
+  --fs-100: 0.72rem;
+  --fs-200: 0.8rem;
+  --fs-300: 0.875rem;
+  --fs-400: 1rem;
+  --fs-500: 1.25rem;
+  --fs-600: 1.5rem;
+  --fs-700: 2rem;
+  --lh-tight: 1.2;
+  --lh-normal: 1.5;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-bold: 700;
+
+  /* ---- Spacing (4px base) ---- */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.5rem;
+  --sp-6: 2rem;
+}
+
+/* Alternate dark themes — selected explicitly via [data-theme] on :root (set by
+ * the theme store from the persisted `bft8-theme` localStorage key). Each block
+ * overrides only the colour tokens; type/spacing/radius are shared with :root.
+ * "graphite" is the base :root above (no data-theme attribute). */
+
+/* "Slate & Teal" — neutral cool slate surfaces with a muted teal accent. */
+:root[data-theme="slate"] {
+  --bg-base: #14161a;
+  --bg-sunken: #0f1113;
+  --surface-1: #1b1e23;
+  --surface-2: #23272e;
+  --surface-3: #2d323a;
+  --border: #2f343c;
+  --border-strong: #414852;
+  --text-primary: #e7eaee;
+  --text-secondary: #b2b9c2;
+  --text-muted: #858d98;
+  --text-disabled: #565d68;
+  --accent: #4fb0a4;
+  --accent-hover: #6fcfc2;
+  --accent-ink: #06110e;
+  --success: #5faa79;
+  --success-bg: #122417;
+  --success-border: #28583a;
+  --success-text: #8fd6a6;
+  --warn: #cf9a49;
+  --warn-bg: #2a2310;
+  --warn-border: #574620;
+  --warn-text: #ecc276;
+  --danger: #d0605a;
+  --danger-bg: #2a1513;
+  --danger-border: #582a27;
+  --danger-text: #e89089;
+  --tx-active: #ff7a59;
+  --tx-active-bg: rgba(255, 122, 89, 0.16);
+  --role-viewer: #7f8a99;
+  --cq: #54c29a;
+  --mycall: #e6c34d;
+}
+
+/* "Phosphor" — scope-like near-black surfaces with an amber phosphor accent. */
+:root[data-theme="phosphor"] {
+  --bg-base: #0c0f0d;
+  --bg-sunken: #080a09;
+  --surface-1: #131816;
+  --surface-2: #1a211d;
+  --surface-3: #242d28;
+  --border: #29332c;
+  --border-strong: #3a453d;
+  --text-primary: #d4e6d8;
+  --text-secondary: #9fb8a6;
+  --text-muted: #6f8377;
+  --text-disabled: #4a5a4f;
+  --accent: #f0b43b;
+  --accent-hover: #ffca61;
+  --accent-ink: #17130a;
+  --success: #4fb87a;
+  --success-bg: #0f2016;
+  --success-border: #295a3c;
+  --success-text: #7fd6a0;
+  --warn: #dd8a3c;
+  --warn-bg: #2a1c0f;
+  --warn-border: #573a1e;
+  --warn-text: #f0b877;
+  --danger: #d85c4e;
+  --danger-bg: #241210;
+  --danger-border: #5a281f;
+  --danger-text: #eb8f82;
+  --tx-active: #ff6a3d;
+  --tx-active-bg: rgba(255, 106, 61, 0.16);
+  --role-viewer: #7f9384;
+  --cq: #5fd39a;
+  --mycall: #f0c94e;
+}
+
+/* Light theme — dark is the UNCONDITIONAL default for this spectrogram-centric
+ * app (dim shacks, night operating), so we deliberately do NOT auto-switch on
+ * `prefers-color-scheme: light`. Light is an explicit opt-in via
+ * [data-theme="light"]. A complete warm-paper palette that keeps the amber
+ * identity; the spectrogram well (--waterfall-bg) stays dark as it is a dark
+ * data surface even in light mode. Text contrast checked for WCAG AA. */
+:root[data-theme="light"] {
+  --bg-base: #f2efe8;
+  --bg-sunken: #e7e2d7;
+  --surface-1: #fbf9f4;
+  --surface-2: #f1eee5;
+  --surface-3: #e6e0d2;
+  --border: #d8d1c0;
+  --border-strong: #bcb3a0;
+  --text-primary: #201d16;
+  --text-secondary: #49443a;
+  --text-muted: #67614f;
+  --text-disabled: #9a9484;
+  --accent: #9c6516;
+  --accent-hover: #7d4f0f;
+  --accent-ink: #ffffff;      /* #fff on #9c6516 ≈ 4.9:1 — passes AA */
+  --success: #2f8f52;
+  --success-bg: #e2f0e4;
+  --success-border: #9cc7a4;
+  --success-text: #1f6b3a;
+  --warn: #a06a10;
+  --warn-bg: #f5ead0;
+  --warn-border: #d8b877;
+  --warn-text: #6f4d0e;
+  --danger: #c0392b;
+  --danger-bg: #f7e0dc;
+  --danger-border: #d99f95;
+  --danger-text: #8a2318;
+  --tx-active: #cf4718;
+  --tx-active-bg: rgba(207, 71, 24, 0.14);
+  --role-viewer: #7a6f57;
+  --cq: #3f7f2c;
+  --mycall: #9c6516;
+}
+
+/* ---- Global base ---- */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--fs-300);
+  line-height: var(--lh-normal);
+}
+
+h1, h2, h3 {
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  line-height: var(--lh-tight);
+}
+
+/* Data readouts opt into monospace. */
+.u-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* App-wide keyboard focus ring (previously missing on every control). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ---- Buttons: 4 variants, token-driven ---- */
+.btn {
+  font: var(--fw-medium) var(--fs-200) / 1 var(--font-ui);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-3);
+  min-height: 1.75rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+}
+.btn:hover:not(:disabled) {
+  background: var(--border-strong);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn--ghost {
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  border-color: var(--border-strong);
+}
+
+.btn--danger {
+  background: transparent;
+  color: var(--danger-text);
+  border-color: var(--danger-border);
+}
+.btn--danger:hover:not(:disabled) {
+  background: var(--danger-bg);
+}
+
+.btn--icon {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  min-width: 1.75rem;
+  padding: var(--sp-1);
+}
+.btn--icon:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  background: none;
+}
+
+/* ---- Badges / pills ---- */
+.badge {
+  font: var(--fw-bold) var(--fs-100) / 1 var(--font-ui);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+.badge--success { background: var(--success-bg); color: var(--success-text); }
+.badge--warn { background: var(--warn-bg); color: var(--warn-text); }
+.badge--danger { background: var(--danger-bg); color: var(--danger-text); }
+.badge--tx { background: var(--tx-active-bg); color: var(--tx-active); border-radius: var(--radius-sm); }
+
+/* ---- Panels / cards ---- */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3);
+}
+
+/* ---- Form inputs ---- */
+.input {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-200);
+  padding: var(--sp-1) var(--sp-2);
+}
+.input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* ---- Motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
