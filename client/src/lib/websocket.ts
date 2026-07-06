@@ -33,11 +33,17 @@ const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.ho
 
 const BASE_DELAY_MS = 1000
 const MAX_DELAY_MS = 30000
-// If no inbound traffic (waterfall lines arrive ~10x/sec, plus decodes) is seen
-// within this window, the connection is treated as half-open and force-closed
-// so the reconnect logic can recover it.
+// Once the session is streaming (past auth/setup), the server pushes waterfall
+// lines ~10x/sec. If none arrive within this window the connection is treated
+// as half-open and force-closed so the reconnect logic can recover it. The
+// watchdog is NOT armed while awaiting viewer auth or first-run setup, when the
+// server is legitimately silent until the user acts.
 const WATCHDOG_TIMEOUT_MS = 15000
 const WATCHDOG_INTERVAL_MS = 5000
+// A connection that stays open this long is considered healthy enough to reset
+// the reconnect backoff — long enough that a crash-looping server (which dies
+// shortly after the handshake) never resets it.
+const STABLE_AFTER_MS = 3000
 
 class BetterFT8Client {
   private ws: WebSocket | null = null
@@ -45,8 +51,9 @@ class BetterFT8Client {
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private shouldConnect = false
   private lastMessageAt = 0
-  private gotMessage = false
+  private streaming = false
   private watchdogTimer: ReturnType<typeof setInterval> | null = null
+  private stableTimer: ReturnType<typeof setTimeout> | null = null
 
   connect() {
     this.shouldConnect = true
@@ -58,25 +65,23 @@ class BetterFT8Client {
 
     const ws = new WebSocket(WS_URL)
     this.ws = ws
-    this.gotMessage = false
+    this.streaming = false
 
     ws.onopen = () => {
       console.log('Connected')
       connected.set(true)
       commandError.set(null)
-      // Do NOT reset the backoff here — a crash-looping server accepts the
-      // handshake then dies. Only reset once we see real inbound traffic.
       this.lastMessageAt = Date.now()
-      this.startWatchdog()
+      // Do NOT reset the backoff on open or on the first message — the server
+      // always sends `hello` first, so a crash-looping server would reset it.
+      // Reset only after the connection has survived a few seconds.
+      this.stableTimer = setTimeout(() => {
+        this.retryDelay = BASE_DELAY_MS
+      }, STABLE_AFTER_MS)
     }
 
     ws.onmessage = (event) => {
       this.lastMessageAt = Date.now()
-      if (!this.gotMessage) {
-        // Session is healthy — a real message arrived. Safe to reset backoff.
-        this.gotMessage = true
-        this.retryDelay = BASE_DELAY_MS
-      }
       try {
         const msg = JSON.parse(event.data) as ServerMessage
 
@@ -97,11 +102,19 @@ class BetterFT8Client {
           if (msg.needs_setup) {
             wizardOpen.set(true)
           }
+          // Open viewing (no auth, no setup): the server streams immediately, so
+          // arm the liveness watchdog. Otherwise stay unarmed until the user
+          // authenticates — the server is silent until then.
+          if (!msg.needs_viewer_auth && !msg.needs_setup) {
+            this.startWatchdog()
+          }
         } else if (msg.type === 'auth_result') {
           if (msg.success) {
             needsAuth.set(false)
             myRole.set('viewer')
             authError.set(null)
+            // Authenticated — the server now streams, so arm the watchdog.
+            this.startWatchdog()
           } else {
             authError.set('Wrong password')
           }
@@ -160,6 +173,10 @@ class BetterFT8Client {
     ws.onclose = () => {
       console.log('Disconnected')
       this.stopWatchdog()
+      if (this.stableTimer) {
+        clearTimeout(this.stableTimer)
+        this.stableTimer = null
+      }
       connected.set(false)
       myRole.set('unauthenticated')
       needsAuth.set(false)
@@ -180,9 +197,13 @@ class BetterFT8Client {
   }
 
   private startWatchdog() {
-    this.stopWatchdog()
+    // Idempotent: arming again (e.g. auth after an open-viewing hello) just
+    // refreshes the baseline rather than stacking intervals.
+    this.streaming = true
+    this.lastMessageAt = Date.now()
+    if (this.watchdogTimer) return
     this.watchdogTimer = setInterval(() => {
-      if (Date.now() - this.lastMessageAt > WATCHDOG_TIMEOUT_MS) {
+      if (this.streaming && Date.now() - this.lastMessageAt > WATCHDOG_TIMEOUT_MS) {
         console.warn('Watchdog: no inbound traffic — forcing reconnect')
         // close() triggers onclose, which schedules the reconnect.
         this.ws?.close()
@@ -191,6 +212,7 @@ class BetterFT8Client {
   }
 
   private stopWatchdog() {
+    this.streaming = false
     if (this.watchdogTimer) {
       clearInterval(this.watchdogTimer)
       this.watchdogTimer = null

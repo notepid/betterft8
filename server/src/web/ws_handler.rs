@@ -48,26 +48,45 @@ fn origin_allowed(headers: &HeaderMap) -> bool {
         Some(o) => o,
     };
 
-    // Extract the host[:port] portion of the Origin URL (strip scheme).
-    let origin_host = origin
+    // Extract the authority (host[:port]) of the Origin URL: strip the scheme
+    // and any trailing path.
+    let origin_authority = origin
         .split_once("://")
         .map(|(_, rest)| rest)
+        .unwrap_or(origin)
+        .split('/')
+        .next()
         .unwrap_or(origin);
 
-    // Allow any loopback origin.
-    let host_only = origin_host.split(':').next().unwrap_or(origin_host);
-    if host_only == "localhost" || host_only == "127.0.0.1" || host_only == "::1" {
+    // Allow any loopback origin. Handle bracketed IPv6 literals (e.g.
+    // `[::1]:8073`) before splitting off the port, so the colons inside the
+    // address aren't mistaken for the port separator.
+    let host_only = authority_host(origin_authority);
+    if host_only.eq_ignore_ascii_case("localhost")
+        || host_only == "127.0.0.1"
+        || host_only == "::1"
+    {
         return true;
     }
 
-    // Allow same-origin: the Origin host must match the request Host header.
+    // Allow same-origin: the Origin authority must match the request Host header.
     if let Some(host) = headers.get(HOST).and_then(|v| v.to_str().ok()) {
-        if origin_host.eq_ignore_ascii_case(host) {
+        if origin_authority.eq_ignore_ascii_case(host) {
             return true;
         }
     }
 
     false
+}
+
+/// Extract the host from an `host[:port]` authority, unwrapping a bracketed
+/// IPv6 literal (`[::1]:8073` -> `::1`, `example.com:8073` -> `example.com`).
+fn authority_host(authority: &str) -> &str {
+    if let Some(rest) = authority.strip_prefix('[') {
+        // IPv6 literal: host is everything up to the closing bracket.
+        return rest.split(']').next().unwrap_or(rest);
+    }
+    authority.split(':').next().unwrap_or(authority)
 }
 
 async fn handle_socket(socket: WebSocket, state: SharedState, remote_addr: String) {
@@ -815,4 +834,60 @@ async fn send_msg(
 ) -> Result<(), axum::Error> {
     let json = serde_json::to_string(msg).unwrap();
     sender.send(Message::Text(json.into())).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::header::{HOST, ORIGIN};
+
+    fn headers(origin: Option<&str>, host: Option<&str>) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        if let Some(o) = origin {
+            h.insert(ORIGIN, o.parse().unwrap());
+        }
+        if let Some(host) = host {
+            h.insert(HOST, host.parse().unwrap());
+        }
+        h
+    }
+
+    #[test]
+    fn authority_host_handles_ipv6_and_ports() {
+        assert_eq!(authority_host("[::1]:8073"), "::1");
+        assert_eq!(authority_host("[::1]"), "::1");
+        assert_eq!(authority_host("example.com:8073"), "example.com");
+        assert_eq!(authority_host("127.0.0.1:8073"), "127.0.0.1");
+        assert_eq!(authority_host("localhost"), "localhost");
+    }
+
+    #[test]
+    fn origin_allowed_permits_loopback_including_ipv6() {
+        assert!(origin_allowed(&headers(Some("http://localhost:8073"), None)));
+        assert!(origin_allowed(&headers(Some("http://127.0.0.1:8073"), None)));
+        // The IPv6 loopback must not be rejected by naive `:`-splitting.
+        assert!(origin_allowed(&headers(Some("http://[::1]:8073"), None)));
+    }
+
+    #[test]
+    fn origin_allowed_permits_same_origin_and_absent() {
+        assert!(origin_allowed(&headers(None, Some("radio.example:8073"))));
+        assert!(origin_allowed(&headers(
+            Some("https://radio.example:8073"),
+            Some("radio.example:8073"),
+        )));
+    }
+
+    #[test]
+    fn origin_allowed_rejects_cross_origin() {
+        assert!(!origin_allowed(&headers(
+            Some("https://evil.example"),
+            Some("radio.example:8073"),
+        )));
+        // A path in the Origin must not smuggle the host past the check.
+        assert!(!origin_allowed(&headers(
+            Some("https://evil.example/radio.example"),
+            Some("radio.example"),
+        )));
+    }
 }

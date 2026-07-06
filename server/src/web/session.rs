@@ -7,9 +7,12 @@ use super::messages::ServerMessage;
 
 pub type ClientId = Uuid;
 
-/// Constant-time byte comparison to avoid leaking password length/content via
-/// timing side-channels. Returns true only if both slices are byte-for-byte
-/// equal. (The `subtle` crate is not a dependency, so this is implemented inline.)
+/// Byte comparison whose running time does not depend on *where* two
+/// equal-length inputs first differ, so a matching prefix can't be discovered
+/// by timing. It short-circuits on a length mismatch, so the length of the
+/// expected password can still leak — acceptable here, since password length is
+/// not the secret and the guessing space is dominated by content. (The `subtle`
+/// crate is not a dependency, so this is implemented inline.)
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
