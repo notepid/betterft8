@@ -142,6 +142,20 @@ pub async fn run(state: Arc<AppState>, mut cmd_rx: mpsc::Receiver<RadioCommand>)
             }
         };
 
+        // ---- Force PTT OFF on every (re)connect ------------------------------
+        // If a prior transmission was interrupted by a dropped connection, the
+        // transmitter may still be keyed.  Unconditionally deassert PTT before
+        // resuming normal command processing so a stuck-on transmitter can never
+        // survive a reconnect.  A failed force-off means the fresh connection is
+        // already broken, so reconnect and try again rather than silently
+        // dropping the PTT-off.
+        if let Err(e) = rig.set_ptt(false).await {
+            tracing::warn!("Failed to force PTT OFF after connect: {e} — reconnecting");
+            let _ = state.radio_tx.send(RadioStatus::default());
+            continue 'outer;
+        }
+        tracing::info!("PTT forced OFF after connect");
+
         // ---- Poll + command loop --------------------------------------------
         let mut poll_timer =
             tokio::time::interval(Duration::from_millis(poll_interval_ms));

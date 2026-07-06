@@ -56,7 +56,18 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
                 // Fall through to the decode path below.
             } else {
                 do_tx(&state, active_start).await;
-                // TX ran — skip decode for this TX period.
+                // TX ran — skip decode for this TX period.  do_tx returns at
+                // roughly T+12.75, still before this period's decode time
+                // (T+13), so a plain `continue` would resolve `active_start` to
+                // the SAME period and decode our own transmission (running the
+                // QSO advance twice per cycle).  Sleep just past this period's
+                // decode instant so the next iteration targets the next (RX)
+                // period.
+                let now_ms = Utc::now().timestamp_millis();
+                let past_decode_ms = (active_decode_ts * 1000 + 500) - now_ms;
+                if past_decode_ms > 0 {
+                    tokio::time::sleep(Duration::from_millis(past_decode_ms as u64)).await;
+                }
                 continue;
             }
         }
@@ -254,6 +265,14 @@ async fn do_tx(state: &SharedState, period_start: i64) {
     let now_ms = Utc::now().timestamp_millis();
     let sleep_ms = (period_start * 1000 - now_ms).max(0) as u64;
     tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
+
+    // --- Re-check TX enable after the sleep ----------------------------------
+    // A HaltTx during the pre-period wait clears `tx_enabled`; honour it here so
+    // we neither key the transmitter nor start playback for a cancelled TX.
+    if !state.tx_enabled.load(Ordering::Relaxed) {
+        tracing::info!("TX aborted: tx disabled during pre-period wait");
+        return;
+    }
 
     // --- Assert PTT ----------------------------------------------------------
     let _ = state.radio_cmd_tx.send(RadioCommand::SetPtt(true)).await;
