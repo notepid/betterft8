@@ -1,6 +1,7 @@
 <script lang="ts">
   import { myRole, needsAuth, operatorStatus, authError } from '../lib/stores'
   import { client } from '../lib/websocket'
+  import { focusOnMount, trapFocus } from '../lib/actions'
 
   let viewerPassword = ''
   let operatorPassword = ''
@@ -30,8 +31,14 @@
 <!-- Viewer auth overlay — shown when server requires a viewer password -->
 {#if $needsAuth}
   <div class="auth-overlay">
-    <div class="auth-box">
-      <h2>BetterFT8</h2>
+    <div
+      class="auth-box"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="viewer-auth-title"
+      use:trapFocus
+    >
+      <h2 id="viewer-auth-title">BetterFT8</h2>
       <p class="auth-hint">This server requires a viewer password.</p>
       <form onsubmit={(e) => { e.preventDefault(); submitViewer() }}>
         <input
@@ -39,7 +46,7 @@
           type="password"
           placeholder="Viewer password"
           bind:value={viewerPassword}
-          autofocus
+          use:focusOnMount
         />
         <button class="btn btn--primary" type="submit">Connect</button>
       </form>
@@ -81,7 +88,7 @@
             type="password"
             placeholder="Operator password"
             bind:value={operatorPassword}
-            autofocus
+            use:focusOnMount
           />
           <button class="btn btn--primary" type="submit">Claim</button>
           <button class="btn btn--icon" type="button" onclick={() => { claimOpen = false; operatorPassword = '' }}>

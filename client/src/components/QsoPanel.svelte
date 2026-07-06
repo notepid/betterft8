@@ -60,6 +60,15 @@
     && (selected.message.toUpperCase().startsWith('CQ '))
     && qsoState.state === 'idle'
 
+  // Explain why a selected decode can't be replied to, instead of showing
+  // nothing. null when there's nothing to explain (no selection or actionable).
+  $: notActionableReason = (() => {
+    if (!selected || canRespond) return null
+    if (!isOperator) return 'Claim operator to reply'
+    if (qsoState.state !== 'idle') return 'Already in a QSO — reset to reply'
+    return 'Select a CQ to reply'
+  })()
+
   function respond() {
     if (!selected) return
     const theirCall = callerCall(selected.message)
@@ -183,6 +192,17 @@
       </span>
       <button class="btn btn--primary" onclick={respond}>Respond</button>
       <button class="btn btn--icon" onclick={() => selectedDecode.set(null)}>✕</button>
+    </div>
+  {:else if notActionableReason}
+    <!-- A decode is selected but can't be replied to — say why, don't go silent. -->
+    <div class="guidance-row">
+      <span class="guidance">{notActionableReason}</span>
+      <button class="btn btn--icon" onclick={() => selectedDecode.set(null)}>✕</button>
+    </div>
+  {:else if qsoState.state === 'idle'}
+    <!-- Idle with nothing selected: tell the operator how to start. -->
+    <div class="guidance-row">
+      <span class="guidance">Click a CQ in the list to reply, or press Call CQ to transmit.</span>
     </div>
   {/if}
 </div>
@@ -318,5 +338,17 @@
   .respond-info strong {
     color: var(--success-text);
     font-family: var(--font-mono);
+  }
+
+  .guidance-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+
+  .guidance {
+    flex: 1;
+    color: var(--text-muted);
+    font-size: var(--fs-100);
   }
 </style>

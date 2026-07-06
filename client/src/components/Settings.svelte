@@ -15,6 +15,7 @@
     wizardOpen,
   } from '../lib/stores'
   import { client } from '../lib/websocket'
+  import { trapFocus } from '../lib/actions'
 
   // Local form state — initialised from stores when panel opens
   let editCallsign = ''
@@ -85,9 +86,15 @@
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div class="overlay" on:click|self={close}>
-    <aside class="panel">
+    <div
+      class="panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
+      use:trapFocus={{ onEscape: close }}
+    >
       <header class="panel-header">
-        <h2>Settings</h2>
+        <h2 id="settings-title">Settings</h2>
         <button class="btn btn--icon" on:click={close}>✕</button>
       </header>
 
@@ -249,7 +256,7 @@
           </div>
         </section>
       {/if}
-    </aside>
+    </div>
   </div>
 {/if}
 

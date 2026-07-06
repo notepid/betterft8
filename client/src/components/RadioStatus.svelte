@@ -1,6 +1,7 @@
 <script lang="ts">
   import { radioStatus, myRole } from '../lib/stores'
   import { client } from '../lib/websocket'
+  import { focusOnMount } from '../lib/actions'
 
   const FT8_BANDS = [
     { label: '160m', freq: 1840000 },
@@ -91,7 +92,7 @@
             bind:value={editValue}
             onblur={commitEdit}
             onkeydown={onKeydown}
-            autofocus
+            use:focusOnMount
           />
           <span class="freq-unit">MHz</span>
         {:else}

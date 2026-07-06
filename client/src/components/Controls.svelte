@@ -12,6 +12,19 @@
   // Parity: false = even (0,30s), true = odd (15,45s)
   let parityOdd = false
 
+  // Two-step arm for on-air Call CQ: first click arms ("Confirm CQ?"), a second
+  // click within the window transmits. Auto-reverts if not confirmed in time.
+  let cqArmed = false
+  let cqArmTimer: ReturnType<typeof setTimeout> | null = null
+
+  function disarmCq() {
+    cqArmed = false
+    if (cqArmTimer) {
+      clearTimeout(cqArmTimer)
+      cqArmTimer = null
+    }
+  }
+
   function toggleTx() {
     const next = !txEnabled
     client.send({ type: 'enable_tx', enabled: next })
@@ -20,6 +33,16 @@
   function callCq() {
     client.send({ type: 'enable_tx', enabled: true })
     client.send({ type: 'call_cq', freq: $txFreq })
+  }
+
+  function onCallCqClick() {
+    if (!cqArmed) {
+      cqArmed = true
+      cqArmTimer = setTimeout(disarmCq, 3000)
+      return
+    }
+    disarmCq()
+    callCq()
   }
 
   function haltTx() {
@@ -73,20 +96,23 @@
     >Odd</button>
   </div>
 
-  <!-- Call CQ -->
+  <!-- Call CQ (two-step: arm, then confirm) -->
   <button
-    class="btn btn--primary"
-    onclick={callCq}
+    class="btn"
+    class:btn--primary={!cqArmed}
+    class:btn--confirm={cqArmed}
+    onclick={onCallCqClick}
+    onblur={disarmCq}
     disabled={transmitting || !canControl}
-    title={!$connected ? 'Disconnected — cannot transmit' : isOperator ? 'Call CQ on TX frequency' : 'Claim operator to control TX'}
-  >Call CQ</button>
+    title={!$connected ? 'Disconnected — cannot transmit' : isOperator ? (cqArmed ? 'Click again to confirm calling CQ' : 'Call CQ on TX frequency') : 'Claim operator to control TX'}
+  >{cqArmed ? 'Confirm CQ?' : 'Call CQ'}</button>
 
   <!-- Halt TX -->
   <button
     class="btn btn--danger"
     onclick={haltTx}
     disabled={!canControl}
-    title={!$connected ? 'Disconnected — cannot transmit' : isOperator ? 'Emergency stop TX' : 'Claim operator to control TX'}
+    title={!$connected ? 'Disconnected — cannot transmit' : isOperator ? 'Emergency stop TX (Esc)' : 'Claim operator to control TX'}
   >Halt TX</button>
 
   <!-- Reset QSO -->
@@ -169,6 +195,14 @@
   .cmd-error {
     color: var(--danger-text);
     font-size: var(--fs-100);
+    font-weight: var(--fw-bold);
+  }
+
+  /* Armed Call CQ: warn styling so the confirm step reads as "are you sure?". */
+  .btn--confirm {
+    background: var(--warn-bg);
+    color: var(--warn-text);
+    border-color: var(--warn-border);
     font-weight: var(--fw-bold);
   }
 </style>

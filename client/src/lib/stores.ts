@@ -10,6 +10,36 @@ import type {
 } from './messages'
 
 export const connected = writable(false)
+
+/** Fine-grained link state for UI feedback. `reconnecting` is set during backoff
+ * between a drop and the next open attempt. */
+export type ConnectionState = 'connected' | 'reconnecting' | 'disconnected'
+export const connectionState = writable<ConnectionState>('disconnected')
+
+/** True while the link is down and the last-known QSO/radio snapshot on screen is
+ * therefore stale. The UI dims (rather than blanks) affected panels. */
+export const dataStale = writable<boolean>(false)
+
+// ---- Transient notifications (toast layer) ----------------------------------
+
+export type Severity = 'info' | 'success' | 'error'
+export type Notification = { id: number; severity: Severity; message: string }
+export const notifications = writable<Notification[]>([])
+
+let notifySeq = 0
+/** Push a transient toast. Errors persist longer; all auto-expire. Use this for
+ * server errors, command failures, and config/test results — NOT for auth/claim
+ * failures (those stay inline via {@link authError}). */
+export function notify(severity: Severity, message: string, ttlMs = severity === 'error' ? 6000 : 3500) {
+  const id = notifySeq++
+  notifications.update((n) => [...n, { id, severity, message }])
+  setTimeout(() => dismissNotification(id), ttlMs)
+  return id
+}
+export function dismissNotification(id: number) {
+  notifications.update((n) => n.filter((x) => x.id !== id))
+}
+
 export const lastMessage = writable<ServerMessage | null>(null)
 /** Set when a command could not be sent (e.g. socket down); cleared on reconnect. */
 export const commandError = writable<string | null>(null)

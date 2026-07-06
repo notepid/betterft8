@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { client } from '../lib/websocket'
+  import { trapFocus } from '../lib/actions'
   import {
     configUpdateResult,
     connected,
@@ -8,6 +9,7 @@
     hamlibAvailable,
     myCall,
     myGrid,
+    needsSetup,
     osType,
     rigHost,
     rigPort,
@@ -215,7 +217,19 @@
 
 {#if $wizardOpen}
   <div class="overlay">
-    <div class="wizard">
+    <div
+      class="wizard"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="wizard-title"
+      use:trapFocus={{ onEscape: $needsSetup ? undefined : close }}
+    >
+
+      <!-- Close (✕) is only offered when the wizard was manually re-opened;
+           during a forced first-run setup it stays non-dismissable. -->
+      {#if !$needsSetup}
+        <button class="wizard-close btn btn--icon" on:click={close} title="Close">✕</button>
+      {/if}
 
       <!-- Step dots -->
       <div class="dots">
@@ -226,7 +240,7 @@
 
       <!-- ── Step 1: Welcome ─────────────────────────────────────── -->
       {#if step === 1}
-        <h2>Welcome to BetterFT8</h2>
+        <h2 id="wizard-title">Welcome to BetterFT8</h2>
         <p class="intro">
           This wizard will help you configure your station for the first time.
           You'll set your callsign, audio devices, and radio connection.
@@ -248,7 +262,7 @@
 
       <!-- ── Step 2: Station Identity ────────────────────────────── -->
       {:else if step === 2}
-        <h2>Station Identity</h2>
+        <h2 id="wizard-title">Station Identity</h2>
 
         <label>
           Callsign
@@ -294,7 +308,7 @@
 
       <!-- ── Step 3: Audio Devices ────────────────────────────────── -->
       {:else if step === 3}
-        <h2>Audio Devices</h2>
+        <h2 id="wizard-title">Audio Devices</h2>
 
         <label>
           Audio Input (receive)
@@ -325,7 +339,7 @@
 
       <!-- ── Step 4: Radio Setup ──────────────────────────────────── -->
       {:else if step === 4}
-        <h2>Radio Connection</h2>
+        <h2 id="wizard-title">Radio Connection</h2>
 
         <div class="backend-toggle">
           <button
@@ -410,7 +424,7 @@
 
       <!-- ── Step 5: Review & Save ─────────────────────────────────── -->
       {:else if step === 5}
-        <h2>Review &amp; Save</h2>
+        <h2 id="wizard-title">Review &amp; Save</h2>
 
         <table class="summary">
           <tbody>
@@ -464,6 +478,7 @@
   }
 
   .wizard {
+    position: relative;
     background: var(--surface-1);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
@@ -476,6 +491,13 @@
     flex-direction: column;
     gap: var(--sp-4);
     color: var(--text-primary);
+  }
+
+  .wizard-close {
+    position: absolute;
+    top: var(--sp-3);
+    right: var(--sp-3);
+    z-index: 1;
   }
 
   .dots {

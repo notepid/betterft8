@@ -1,6 +1,14 @@
 <script lang="ts">
-  import { connected, radioStatus, qsoUpdate, settingsOpen } from '../lib/stores'
+  import { connectionState, dataStale, radioStatus, qsoUpdate, settingsOpen } from '../lib/stores'
   import Login from './Login.svelte'
+
+  // Three-state link badge (label + badge variant) driven by connectionState.
+  $: connBadge =
+    $connectionState === 'connected'
+      ? { cls: 'badge--success', text: 'Connected' }
+      : $connectionState === 'reconnecting'
+        ? { cls: 'badge--warn', text: 'Reconnecting…' }
+        : { cls: 'badge--danger', text: 'Disconnected' }
 
   function formatFreq(hz: number): string {
     const mhz = hz / 1_000_000
@@ -23,23 +31,24 @@
 <div class="statusbar card">
   <h1>BetterFT8</h1>
 
-  <span
-    class="badge"
-    class:badge--success={$connected}
-    class:badge--danger={!$connected}
-    title={$connected ? 'Connected' : 'Disconnected'}
-  >
-    {$connected ? 'Connected' : 'Disconnected'}
+  <span class="badge {connBadge.cls}" title={connBadge.text}>
+    {connBadge.text}
   </span>
 
   <Login />
 
-  <!-- Frequency + mode readout promoted out of RadioStatus -->
-  <div class="freq-readout">
+  <!-- Frequency + mode readout promoted out of RadioStatus. Dimmed (not blanked)
+       when the link is down so the values read as last-known, not live. -->
+  <div
+    class="freq-readout"
+    class:stale={$dataStale}
+    title={$dataStale ? 'Link down — showing last-known values' : ''}
+  >
     {#if $radioStatus?.connected}
       <span class="freq u-mono">{formatFreq($radioStatus.freq)}</span>
       <span class="freq-unit">MHz</span>
       <span class="mode">{$radioStatus.mode}</span>
+      {#if $dataStale}<span class="stale-hint">stale</span>{/if}
     {:else}
       <span class="no-radio">No radio</span>
     {/if}
@@ -51,7 +60,10 @@
     class:tx={lampState === 'tx'}
     class:queued={lampState === 'queued'}
     class:rx={lampState === 'rx'}
-    title={lampState === 'tx' ? 'Transmitting' : lampState === 'queued' ? 'Transmission queued' : 'Receiving'}
+    class:stale={$dataStale}
+    title={$dataStale
+      ? 'Link down — last-known transmit state'
+      : lampState === 'tx' ? 'Transmitting' : lampState === 'queued' ? 'Transmission queued' : 'Receiving'}
   >
     {lampText}
   </div>
@@ -86,6 +98,22 @@
     display: flex;
     align-items: baseline;
     gap: var(--sp-2);
+    transition: opacity 0.2s ease;
+  }
+
+  /* Stale = last-known, not live. Dim rather than blank so the operator keeps
+     context but can see the link is down. */
+  .freq-readout.stale,
+  .tx-lamp.stale {
+    opacity: 0.4;
+  }
+
+  .stale-hint {
+    color: var(--warn-text);
+    font-size: var(--fs-100);
+    font-style: italic;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
   .freq {

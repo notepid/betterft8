@@ -1,6 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { get } from 'svelte/store'
   import { client } from './lib/websocket'
+  import {
+    myRole,
+    connectionState,
+    settingsOpen,
+    wizardOpen,
+    needsAuth,
+  } from './lib/stores'
   import Waterfall from './components/Waterfall.svelte'
   import DecodeList from './components/DecodeList.svelte'
   import RadioStatus from './components/RadioStatus.svelte'
@@ -10,13 +18,43 @@
   import SetupWizard from './components/SetupWizard.svelte'
   import WaterfallControls from './components/WaterfallControls.svelte'
   import StatusBar from './components/StatusBar.svelte'
+  import Toast from './components/Toast.svelte'
+
+  // Global Escape = emergency Halt TX. Only fires for a connected operator, and
+  // only when the operator is NOT typing in a field and NO overlay is open —
+  // overlays own Esc for close, so we must not collide with that.
+  function onGlobalKeydown(e: KeyboardEvent) {
+    if (e.key !== 'Escape') return
+    if (get(myRole) !== 'operator') return
+    if (get(connectionState) !== 'connected') return
+    if (get(settingsOpen) || get(wizardOpen) || get(needsAuth)) return
+
+    const t = e.target as HTMLElement | null
+    if (t) {
+      const tag = t.tagName
+      if (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        t.isContentEditable
+      ) {
+        return
+      }
+    }
+
+    client.send({ type: 'halt_tx' })
+  }
 
   onMount(() => {
     client.connect()
     const interval = setInterval(() => {
       client.send({ type: 'ping' })
     }, 5000)
-    return () => clearInterval(interval)
+    window.addEventListener('keydown', onGlobalKeydown)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('keydown', onGlobalKeydown)
+    }
   })
 </script>
 
@@ -45,6 +83,9 @@
 
 <!-- Setup wizard overlay (shown on first run or manually triggered) -->
 <SetupWizard />
+
+<!-- Transient notification stack (toast layer) -->
+<Toast />
 
 <style>
   /* Viewport-height operating console: nothing an operator watches scrolls

@@ -6,6 +6,8 @@ import {
   commandError,
   configUpdateResult,
   connected,
+  connectionState,
+  dataStale,
   deviceList,
   hamlibAvailable,
   lastMessage,
@@ -16,6 +18,7 @@ import {
   myRole,
   needsAuth,
   needsSetup,
+  notify,
   operatorStatus,
   osType,
   qsoUpdate,
@@ -56,6 +59,23 @@ class BetterFT8Client {
   private cmdErrorTimer: ReturnType<typeof setTimeout> | null = null
   private stableTimer: ReturnType<typeof setTimeout> | null = null
 
+  // ---- Operator relock (survives reconnects) --------------------------------
+  // Cached ONLY in memory — never localStorage/sessionStorage. `operatorPassword`
+  // holds the credential of a claim that has succeeded; `wantOperator` records
+  // that we intend to hold the lock so we can re-claim after a reconnect.
+  private operatorPassword: string | null = null
+  private wantOperator = false
+  // Password of a claim_operator we have sent but not yet had confirmed.
+  private pendingOperatorPassword: string | null = null
+  // A claim_operator is in flight awaiting its operator_status / error reply.
+  private claimPending = false
+  // The in-flight claim is an automatic reconnect re-claim (drives success/lost
+  // toasts and distinguishes it from a manual claim in the login widget).
+  private reclaimInFlight = false
+  // Guard: at most one automatic re-claim per connection, so a repeatedly
+  // failing claim can never loop.
+  private reclaimAttempted = false
+
   connect() {
     this.shouldConnect = true
     this.open()
@@ -67,10 +87,18 @@ class BetterFT8Client {
     const ws = new WebSocket(WS_URL)
     this.ws = ws
     this.streaming = false
+    // Fresh socket: void any claim that was in flight on the previous one and
+    // re-arm the single-shot auto-reclaim for this connection. Note we KEEP
+    // `operatorPassword` / `wantOperator` — that intent is what survives.
+    this.pendingOperatorPassword = null
+    this.claimPending = false
+    this.reclaimInFlight = false
+    this.reclaimAttempted = false
 
     ws.onopen = () => {
       console.log('Connected')
       connected.set(true)
+      connectionState.set('connected')
       commandError.set(null)
       this.lastMessageAt = Date.now()
       // Do NOT reset the backoff on open or on the first message — the server
@@ -108,6 +136,7 @@ class BetterFT8Client {
           // authenticates — the server is silent until then.
           if (!msg.needs_viewer_auth && !msg.needs_setup) {
             this.startWatchdog()
+            this.maybeReclaimOperator()
           }
         } else if (msg.type === 'auth_result') {
           if (msg.success) {
@@ -116,8 +145,14 @@ class BetterFT8Client {
             authError.set(null)
             // Authenticated — the server now streams, so arm the watchdog.
             this.startWatchdog()
+            // If we held (or were seeking) the operator lock before the drop,
+            // reclaim it now that we are authenticated again.
+            this.maybeReclaimOperator()
           } else {
-            authError.set('Wrong password')
+            // messages.ts AuthResultMessage carries no reason field today; prefer
+            // one if the server ever adds it, else fall back to the generic text.
+            const reason = (msg as { reason?: string }).reason
+            authError.set(reason ?? 'Wrong password')
           }
         } else if (msg.type === 'operator_status') {
           operatorStatus.set(msg)
@@ -126,6 +161,20 @@ class BetterFT8Client {
             if (current === 'operator') return 'viewer'
             return current
           })
+          if (msg.you_are_operator && this.claimPending) {
+            // This confirms a claim we initiated. Commit the credential + intent
+            // so we can restore the lock across future reconnects.
+            if (this.pendingOperatorPassword !== null) {
+              this.operatorPassword = this.pendingOperatorPassword
+            }
+            this.wantOperator = true
+            this.claimPending = false
+            this.pendingOperatorPassword = null
+            if (this.reclaimInFlight) {
+              this.reclaimInFlight = false
+              notify('success', 'Operator lock restored')
+            }
+          }
         } else if (msg.type === 'waterfall') {
           waterfallLine.set(msg)
         } else if (msg.type === 'decode') {
@@ -161,7 +210,24 @@ class BetterFT8Client {
         } else if (msg.type === 'serial_port_list') {
           serialPorts.set(msg.ports)
         } else if (msg.type === 'error') {
-          authError.set(msg.message)
+          if (this.reclaimInFlight) {
+            // Our automatic re-claim was rejected (e.g. operator password
+            // changed) — we are a viewer now. Clear intent so we don't loop.
+            this.reclaimInFlight = false
+            this.claimPending = false
+            this.wantOperator = false
+            this.operatorPassword = null
+            this.pendingOperatorPassword = null
+            notify('error', 'Operator lock lost — you are now a viewer')
+          } else if (this.claimPending) {
+            // A manual operator claim failed — keep it inline in the login form.
+            this.claimPending = false
+            this.pendingOperatorPassword = null
+            authError.set(msg.message)
+          } else {
+            // Generic server error → transient toast, not the auth widget.
+            notify('error', msg.message)
+          }
           lastMessage.set(msg)
         } else {
           lastMessage.set(msg)
@@ -182,13 +248,16 @@ class BetterFT8Client {
       myRole.set('unauthenticated')
       needsAuth.set(false)
       operatorStatus.set(null)
-      // Clear live radio/QSO state so the UI does not keep showing a frozen
-      // (but plausible) transmitter/QSO status during the outage.
-      qsoUpdate.set(null)
-      radioStatus.set(null)
+      // Keep the last-known radio/QSO snapshot on screen but flag it as stale so
+      // the UI can DIM (rather than blank) it during the outage. It is refreshed
+      // and un-dimmed once the server resends live state after reconnect.
+      dataStale.set(true)
       this.ws = null
       if (this.shouldConnect) {
         this.scheduleReconnect()
+      } else {
+        // Intentional stop / not reconnecting.
+        connectionState.set('disconnected')
       }
     }
 
@@ -202,6 +271,9 @@ class BetterFT8Client {
     // refreshes the baseline rather than stacking intervals.
     this.streaming = true
     this.lastMessageAt = Date.now()
+    // Streaming has (re)started — the server is pushing live state again, so the
+    // on-screen snapshot is no longer stale.
+    dataStale.set(false)
     if (this.watchdogTimer) return
     this.watchdogTimer = setInterval(() => {
       if (this.streaming && Date.now() - this.lastMessageAt > WATCHDOG_TIMEOUT_MS) {
@@ -220,7 +292,19 @@ class BetterFT8Client {
     }
   }
 
+  private maybeReclaimOperator() {
+    // At most one automatic re-claim per connection (loop protection) and only
+    // if we actually hold cached operator intent + credential.
+    if (this.reclaimAttempted) return
+    if (!this.wantOperator || this.operatorPassword === null) return
+    this.reclaimAttempted = true
+    this.reclaimInFlight = true
+    // send() caches pendingOperatorPassword + sets claimPending.
+    this.send({ type: 'claim_operator', password: this.operatorPassword })
+  }
+
   private scheduleReconnect() {
+    connectionState.set('reconnecting')
     if (this.retryTimer) return
     console.log(`Reconnecting in ${this.retryDelay}ms`)
     this.retryTimer = setTimeout(() => {
@@ -232,6 +316,19 @@ class BetterFT8Client {
 
   send(msg: ClientMessage): boolean {
     if (this.ws?.readyState === WebSocket.OPEN) {
+      // Track operator-lock intent as it goes out on the wire.
+      if (msg.type === 'claim_operator') {
+        this.pendingOperatorPassword = msg.password
+        this.claimPending = true
+      } else if (msg.type === 'release_operator') {
+        // Explicit release drops the cached credential + intent so we do NOT
+        // silently re-grab the lock on the next reconnect.
+        this.wantOperator = false
+        this.operatorPassword = null
+        this.pendingOperatorPassword = null
+        this.claimPending = false
+        this.reclaimInFlight = false
+      }
       this.ws.send(JSON.stringify(msg))
       // A successful send clears any stale "command not sent" notice.
       if (this.cmdErrorTimer) {
