@@ -22,7 +22,7 @@ The server (`server/`, Rust + Axum) handles all hardware: audio capture, FT8 dec
 ## Requirements
 
 - [Rust](https://rustup.rs/) (stable)
-- [Node.js](https://nodejs.org/) 18+
+- [Node.js](https://nodejs.org/) 20+
 - [Hamlib](https://github.com/Hamlib/Hamlib/releases) `rigctld` (for radio control)
 - A C compiler (MSVC on Windows, gcc/clang on Linux/macOS)
 
@@ -44,7 +44,14 @@ npm run build
 
 **2. Configure**
 
-Copy and edit `betterft8.toml`:
+Copy the example config and edit it (`betterft8.toml` is gitignored so your
+password is never committed):
+
+```bash
+cp betterft8.example.toml betterft8.toml
+```
+
+See `betterft8.example.toml` for every option with comments. A minimal config:
 ```toml
 [network]
 host = "0.0.0.0"
@@ -113,7 +120,7 @@ Common Hamlib model numbers:
 Any number of clients can connect and view the waterfall and decoded messages. Only one client at a time can claim the operator role (required for TX and radio control).
 
 - **`operator_password`** — required to claim the operator role
-- **`viewer_password`** — if set, all clients must authenticate before seeing anything
+- **`viewer_password`** — if set, all clients must authenticate before seeing anything; leave it empty (`""`) or omit it for open viewing (anyone can watch without a password)
 
 For remote operation over the internet, enable TLS in `betterft8.toml`:
 ```toml

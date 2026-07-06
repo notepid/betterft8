@@ -9,9 +9,59 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# SECURITY: The release build jobs below run on self-hosted runners. In a public
+# repo, running self-hosted runners for `pull_request` events from forks would let
+# any fork PR execute arbitrary code on the maintainer's machines. Every self-hosted
+# job is therefore gated with an `if:` guard that allows the job only for `push`
+# events (to main) and for pull requests that originate from THIS repository (not a
+# fork). Fork PRs are validated by the GitHub-hosted `verify` job instead.
+
 jobs:
+  # Lint / test / typecheck on a GitHub-hosted runner. This is the only job that is
+  # safe to run for fork pull requests, so it runs for all events (no fork guard).
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libhamlib-dev
+      - name: Rustfmt
+        working-directory: server
+        run: cargo fmt --check
+      # NOTE: clippy is intentionally run WITHOUT `-D warnings`. The codebase currently
+      # has ~19 pre-existing clippy warnings; using `-D warnings` would make this job
+      # immediately red. Once the existing warnings are cleaned up, tighten this to
+      # `cargo clippy --all-targets -- -D warnings`.
+      - name: Clippy
+        working-directory: server
+        run: cargo clippy --all-targets
+      - name: Test
+        working-directory: server
+        run: cargo test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install client deps
+        working-directory: client
+        run: npm ci
+      # svelte-check via `npm run check`. Marked non-fatal in case the `check` script
+      # is not yet present in client/package.json.
+      - name: Svelte check
+        working-directory: client
+        run: npm run check
+        continue-on-error: true
+
   # Build the Svelte client (shared across all platform builds)
   client:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +81,7 @@ jobs:
 
   # Windows x64 — with Hamlib (vendored DLLs)
   windows:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     needs: client
     runs-on: [self-hosted, Windows]
     defaults:
@@ -65,6 +116,7 @@ jobs:
 
   # Windows x64 — rigctld only (no Hamlib DLLs needed)
   windows-rigctld:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     needs: client
     runs-on: [self-hosted, Windows]
     defaults:
@@ -95,6 +147,7 @@ jobs:
 
   # Linux x64 — with Hamlib (requires libhamlib4 at runtime)
   linux:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     needs: client
     runs-on: [self-hosted, Linux]
     steps:
@@ -123,6 +176,7 @@ jobs:
 
   # Linux x64 — rigctld only (no Hamlib dependency)
   linux-rigctld:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     needs: client
     runs-on: [self-hosted, Linux]
     steps:
@@ -151,6 +205,7 @@ jobs:
 
   # Raspberry Pi aarch64 — with Hamlib (requires libhamlib4 at runtime)
   raspberry-pi:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     needs: client
     runs-on: [self-hosted, Linux]
     steps:
@@ -178,6 +233,7 @@ jobs:
 
   # Raspberry Pi aarch64 — rigctld only (no Hamlib dependency)
   raspberry-pi-rigctld:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     needs: client
     runs-on: [self-hosted, Linux]
     steps:

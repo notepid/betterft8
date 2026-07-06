@@ -1,0 +1,76 @@
+# BetterFT8 example configuration.
+#
+# Copy this file to `betterft8.toml` (in the repo/working directory the server
+# is launched from) and edit the values below. The server loads its config from
+# the current working directory by default, e.g.:
+#
+#     cargo run --release -- ../betterft8.toml
+#
+# The real `betterft8.toml` is gitignored because it can contain passwords —
+# never commit it. This example file uses placeholder values only.
+
+[network]
+# Interface to bind to. "0.0.0.0" listens on all interfaces (LAN/remote access);
+# use "127.0.0.1" to restrict to the local machine only.
+host = "0.0.0.0"
+# HTTP(S) / WebSocket port the web UI is served on.
+port = 8073
+
+# Optional: serve the client from disk instead of the assets embedded in the
+# binary. Handy during development. Omit/comment out to use the embedded client.
+# static_files = "../client/dist"
+
+# Password required to claim the single operator role (needed to transmit and
+# control the radio). All other connected clients are read-only viewers.
+operator_password = "changeme"
+
+# Optional viewing password. Semantics:
+#   - omitted or set to ""  -> OPEN VIEWING: anyone can connect and watch the
+#                              waterfall / decodes without authenticating.
+#   - set to a non-empty    -> every client must supply this password before
+#     value                    seeing anything.
+viewer_password = ""
+
+# --- TLS (optional) ------------------------------------------------------
+# Set BOTH to enable HTTPS/WSS (recommended for remote operation over the
+# internet). When set, connect via https://<server>:<port>. Leave both
+# commented out to serve plain HTTP.
+# tls_cert = "/path/to/cert.pem"
+# tls_key  = "/path/to/key.pem"
+
+[station]
+# Your amateur radio callsign.
+callsign = "N0CALL"
+# Your Maidenhead grid locator (4 or 6 characters).
+grid = "AA00"
+# ADIF log file written as QSOs complete (relative to the working directory).
+log_file = "ft8.adi"
+
+[audio]
+# Input (RX) and output (TX) audio devices by name substring. Omit/comment out
+# to use the system default device. Audio is decimated to 12 kHz mono internally.
+# input_device = "USB Audio CODEC"
+# output_device = "USB Audio CODEC"
+# Capture/playback sample rate in Hz (device native rate; 48000 is typical).
+sample_rate = 48000
+
+[radio]
+# Radio control backend:
+#   "rigctld" (default) - talk to a running Hamlib rigctld daemon over TCP.
+#   "hamlib"            - drive the rig directly via libhamlib (no daemon).
+backend = "rigctld"
+
+# --- rigctld backend settings (used when backend = "rigctld") ---
+rigctld_host = "localhost"
+rigctld_port = 4532
+
+# --- hamlib direct backend settings (used when backend = "hamlib") ---
+# Hamlib rig model number (see README table / `rigctl -l`).
+# rig_model = 3073
+# Serial port for CAT control.
+# serial_port = "/dev/ttyUSB0"   # or "COM3" on Windows
+# CAT serial baud rate.
+# baud_rate = 19200
+
+# How often (milliseconds) to poll the radio for frequency/mode/PTT status.
+poll_interval_ms = 2000
