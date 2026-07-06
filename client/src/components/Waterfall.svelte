@@ -362,17 +362,62 @@
   }
 
   onMount(() => {
-    const updateSize = () => {
-      const newW = canvas.clientWidth
-      if (newW > 0 && newW !== canvas.width) {
-        canvas.width = newW
+    // Resize the backing store to match the box, PRESERVING the spectrogram.
+    // History is kept as the working `imageData` buffer; on a resize we allocate
+    // a new buffer at the new dimensions and copy the retained pixels in,
+    // anchored to the TOP-LEFT so the newest row (row 0) stays put — growing the
+    // cell reveals more empty time-history at the bottom (which fills as new
+    // lines scroll down), shrinking it clips the oldest rows. Never blanks.
+    const resizeCanvas = () => {
+      if (!canvas) return
+      const newW = Math.max(1, Math.floor(canvas.clientWidth))
+      const newH = Math.max(1, Math.floor(canvas.clientHeight))
+      if (newW === canvas.width && newH === canvas.height) return
+
+      const ctx = canvas.getContext('2d')
+      const oldImage = imageData // retained spectrogram pixels (null until 1st line)
+      const oldW = canvas.width
+      const oldH = canvas.height
+
+      canvas.width = newW
+      canvas.height = newH
+
+      if (!ctx) {
         imageData = null
+        return
       }
+
+      // Reallocate the working buffer at the new size and seed opaque alpha.
+      const next = ctx.createImageData(newW, newH)
+      const d = next.data
+      for (let i = 3; i < d.length; i += 4) d[i] = 255
+
+      // Copy retained history anchored to the top (newest row stays at row 0).
+      if (oldImage) {
+        const src = oldImage.data
+        const copyH = Math.min(oldH, newH)
+        const copyRowBytes = Math.min(oldW, newW) * 4
+        for (let y = 0; y < copyH; y++) {
+          const srcRow = y * oldW * 4
+          const dstRow = y * newW * 4
+          for (let x = 0; x < copyRowBytes; x++) {
+            d[dstRow + x] = src[srcRow + x]
+          }
+        }
+      }
+
+      imageData = next
+      ctx.putImageData(next, 0, 0)
     }
 
-    updateSize()
+    resizeCanvas()
 
-    const ro = new ResizeObserver(updateSize)
+    // Debounce the observer so dragging a resize doesn't re-init every frame.
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined
+    const ro = new ResizeObserver(() => {
+      if (resizeTimer !== undefined) clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(resizeCanvas, 150)
+    })
     ro.observe(canvas)
 
     const unsubWaterfall = waterfallLine.subscribe((line) => {
@@ -392,6 +437,7 @@
     return () => {
       unsubWaterfall()
       unsubDecodes()
+      if (resizeTimer !== undefined) clearTimeout(resizeTimer)
       ro.disconnect()
     }
   })
@@ -400,12 +446,17 @@
 <div class="waterfall-wrap">
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <canvas bind:this={canvas} height="300" on:click={handleCanvasClick}></canvas>
+  <canvas bind:this={canvas} on:click={handleCanvasClick}></canvas>
+  <p class="waterfall-caption">Click to set TX frequency · click a callsign to reply</p>
 </div>
 
 <style>
   .waterfall-wrap {
+    display: flex;
+    flex-direction: column;
     width: 100%;
+    height: 100%;
+    min-height: 0;
     background: var(--waterfall-bg);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -414,8 +465,19 @@
 
   canvas {
     display: block;
+    flex: 1 1 auto;
     width: 100%;
-    height: 300px;
+    min-height: 0;
     cursor: crosshair;
+  }
+
+  .waterfall-caption {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: var(--sp-1) var(--sp-2);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: var(--fs-100);
+    line-height: var(--lh-tight);
   }
 </style>

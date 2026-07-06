@@ -1,16 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { client } from './lib/websocket'
-  import { connected, settingsOpen } from './lib/stores'
   import Waterfall from './components/Waterfall.svelte'
   import DecodeList from './components/DecodeList.svelte'
   import RadioStatus from './components/RadioStatus.svelte'
   import Controls from './components/Controls.svelte'
   import QsoPanel from './components/QsoPanel.svelte'
-  import Login from './components/Login.svelte'
   import Settings from './components/Settings.svelte'
   import SetupWizard from './components/SetupWizard.svelte'
   import WaterfallControls from './components/WaterfallControls.svelte'
+  import StatusBar from './components/StatusBar.svelte'
 
   onMount(() => {
     client.connect()
@@ -22,37 +21,7 @@
 </script>
 
 <main>
-  <header>
-    <h1>BetterFT8</h1>
-    <span
-      class="badge"
-      class:badge--success={$connected}
-      class:badge--danger={!$connected}
-      title={$connected ? 'Connected' : 'Disconnected'}
-    >
-      {$connected ? 'Connected' : 'Disconnected'}
-    </span>
-    <Login />
-    <button
-      class="btn btn--icon settings-btn"
-      title="Settings"
-      on:click={() => settingsOpen.update((v) => !v)}
-    >
-      ⚙
-    </button>
-  </header>
-
-  <section class="radio-section">
-    <RadioStatus />
-  </section>
-
-  <section class="controls-section">
-    <Controls />
-  </section>
-
-  <section class="qso-section">
-    <QsoPanel />
-  </section>
+  <StatusBar />
 
   <section class="waterfall-section">
     <Waterfall />
@@ -63,6 +32,12 @@
     <h2>Decoded Messages</h2>
     <DecodeList />
   </section>
+
+  <section class="operate-section">
+    <RadioStatus />
+    <QsoPanel />
+    <Controls />
+  </section>
 </main>
 
 <!-- Settings slide-out panel (portal-style fixed overlay) -->
@@ -72,54 +47,97 @@
 <SetupWizard />
 
 <style>
+  /* Viewport-height operating console: nothing an operator watches scrolls
+     off-screen. The page body never scrolls; each cell scrolls internally. */
+  :global(html),
+  :global(body) {
+    height: 100%;
+  }
+
   main {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: var(--sp-4) var(--sp-5);
-  }
-
-  header {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-4);
-    margin-bottom: var(--sp-4);
-    flex-wrap: wrap;
-  }
-
-  h1 {
+    height: 100vh;
+    max-width: none;
     margin: 0;
-    font-size: var(--fs-600);
-    color: var(--accent);
-  }
-
-  .settings-btn {
-    margin-left: auto;
-    font-size: var(--fs-500);
-  }
-
-  .radio-section {
-    margin-bottom: var(--sp-2);
-  }
-
-  .controls-section {
-    margin-bottom: var(--sp-2);
-  }
-
-  .qso-section {
-    margin-bottom: var(--sp-3);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-rows: auto minmax(240px, 42vh) minmax(0, 1fr);
+    grid-template-areas:
+      "statusbar statusbar"
+      "waterfall waterfall"
+      "decodes   operate";
+    gap: var(--sp-2);
+    padding: var(--sp-2);
+    overflow: hidden;
   }
 
   .waterfall-section {
-    margin-bottom: var(--sp-4);
+    grid-area: waterfall;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
   }
 
   .decode-section {
-    margin-top: var(--sp-4);
+    grid-area: decodes;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    overflow: hidden;
   }
 
   .decode-section h2 {
     font-size: var(--fs-300);
     color: var(--text-muted);
-    margin: 0 0 var(--sp-2);
+    margin: 0;
+    flex: 0 0 auto;
+  }
+
+  /* Right operate column: tuning, QSO, and TX controls stacked. */
+  .operate-section {
+    grid-area: operate;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    overflow-y: auto;
+  }
+
+  /* ---- Tablet: single column, operate becomes a wrapping row above decodes ---- */
+  @media (max-width: 1099px) {
+    main {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto minmax(240px, 40vh) auto minmax(0, 1fr);
+      grid-template-areas:
+        "statusbar"
+        "waterfall"
+        "operate"
+        "decodes";
+    }
+
+    .operate-section {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      overflow: visible;
+    }
+  }
+
+  /* ---- Phone: waterfall shrinks, decodes fill, operate panels stack below ---- */
+  @media (max-width: 599px) {
+    main {
+      grid-template-rows: auto 28vh minmax(0, 1fr) auto;
+      grid-template-areas:
+        "statusbar"
+        "waterfall"
+        "decodes"
+        "operate";
+    }
+
+    .operate-section {
+      flex-direction: column;
+      flex-wrap: nowrap;
+    }
   }
 </style>

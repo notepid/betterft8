@@ -4,7 +4,6 @@
 
   $: txEnabled = $qsoUpdate?.tx_enabled ?? false
   $: transmitting = $radioStatus?.ptt ?? false
-  $: txQueued = $qsoUpdate?.tx_queued ?? false
   $: isOperator = $myRole === 'operator'
   // TX-affecting controls require an operator AND a live connection; a command
   // sent over a dead socket is silently dropped, so disable rather than mislead.
@@ -98,13 +97,6 @@
     title={!$connected ? 'Disconnected — cannot transmit' : isOperator ? 'Clear QSO state and stop TX' : 'Claim operator to control TX'}
   >Reset</button>
 
-  <!-- TX status badge -->
-  {#if transmitting}
-    <span class="badge badge--tx tx-badge">TX</span>
-  {:else if txQueued}
-    <span class="badge badge--warn">QUEUED</span>
-  {/if}
-
   <!-- Command send failure (e.g. socket down) -->
   {#if $commandError}
     <span class="cmd-error">{$commandError}</span>
@@ -174,18 +166,9 @@
     color: var(--accent);
   }
 
-  .tx-badge {
-    animation: blink 0.8s step-end infinite;
-  }
-
   .cmd-error {
     color: var(--danger-text);
     font-size: var(--fs-100);
     font-weight: var(--fw-bold);
-  }
-
-  @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.4; }
   }
 </style>

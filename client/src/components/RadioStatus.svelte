@@ -80,6 +80,8 @@
 </script>
 
 <div class="radio-panel">
+  <h2 class="panel-title">Tuning</h2>
+
   <div class="top-row">
     <div class="freq-block">
       {#if $radioStatus?.connected}
@@ -96,10 +98,6 @@
           <button class="freq-display u-mono" onclick={startEdit} title={isOperator ? 'Click to edit frequency' : 'Claim operator to change frequency'} class:locked={!isOperator}>
             {formatFreq($radioStatus.freq)}
           </button>
-        {/if}
-        <span class="mode">{$radioStatus.mode}</span>
-        {#if $radioStatus.ptt}
-          <span class="badge badge--tx ptt-indicator" title="Transmitting">TX</span>
         {/if}
       {:else}
         <span class="no-radio">No radio</span>
@@ -133,6 +131,14 @@
     gap: var(--sp-2);
   }
 
+  .panel-title {
+    font-size: var(--fs-100);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin: 0;
+  }
+
   .top-row {
     display: flex;
     align-items: center;
@@ -149,7 +155,7 @@
     background: none;
     border: none;
     cursor: pointer;
-    font-size: var(--fs-600);
+    font-size: var(--fs-500);
     font-weight: var(--fw-bold);
     color: var(--accent);
     padding: 0;
@@ -179,23 +185,6 @@
   .freq-unit {
     color: var(--text-muted);
     font-size: var(--fs-200);
-  }
-
-  .mode {
-    font-size: var(--fs-300);
-    color: var(--text-secondary);
-    background: var(--surface-2);
-    border-radius: var(--radius-sm);
-    padding: var(--sp-1) var(--sp-2);
-  }
-
-  .ptt-indicator {
-    animation: blink 0.8s step-end infinite;
-  }
-
-  @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
   }
 
   .no-radio {

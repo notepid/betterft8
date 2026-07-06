@@ -11,9 +11,6 @@
     rigHost,
     rigPort,
     settingsOpen,
-    waterfallScheme,
-    waterfallFloor,
-    waterfallCeiling,
     logEntries,
     wizardOpen,
   } from '../lib/stores'
@@ -119,18 +116,11 @@
             class="input mono"
           />
         </div>
-        <div class="field-row">
-          <span class="field-label">Log file</span>
-          <span class="display-val">{$logFile}</span>
-        </div>
         {#if $myRole === 'operator'}
           <div class="btn-row">
             <button class="btn btn--primary" on:click={saveStation}>Save station</button>
           </div>
         {/if}
-        <div class="btn-row">
-          <a href="/api/log" download="ft8.adi" class="dl-link">Download ADIF log</a>
-        </div>
       </section>
 
       <!-- Audio -->
@@ -213,31 +203,25 @@
         </div>
       {/if}
 
-      <!-- Display -->
+      <!-- Notifications -->
       <section>
-        <h3>Display</h3>
-        <div class="field-row">
-          <label for="s-wf-scheme">Waterfall scheme</label>
-          <select id="s-wf-scheme" class="input" bind:value={$waterfallScheme}>
-            <option value="classic">Classic</option>
-            <option value="greyscale">Greyscale</option>
-            <option value="heat">Heat</option>
-          </select>
-        </div>
-        <div class="field-row">
-          <label for="s-wf-floor">WF floor</label>
-          <input id="s-wf-floor" type="range" min="-120" max="-1" step="1" bind:value={$waterfallFloor} />
-          <span class="level-val">{$waterfallFloor} dB</span>
-        </div>
-        <div class="field-row">
-          <label for="s-wf-ceil">WF ceiling</label>
-          <input id="s-wf-ceil" type="range" min="-119" max="0" step="1" bind:value={$waterfallCeiling} />
-          <span class="level-val">{$waterfallCeiling} dB</span>
-        </div>
+        <h3>Notifications</h3>
         <label class="checkbox-row">
           <input type="checkbox" bind:checked={$alertEnabled} />
           Alert when callsign is heard
         </label>
+      </section>
+
+      <!-- Log -->
+      <section>
+        <h3>Log</h3>
+        <div class="field-row">
+          <span class="field-label">Log file</span>
+          <span class="display-val">{$logFile}</span>
+        </div>
+        <div class="btn-row">
+          <a href="/api/log" download="ft8.adi" class="dl-link">Download ADIF log</a>
+        </div>
       </section>
 
       <!-- Recent QSOs -->
@@ -403,20 +387,6 @@
   }
   .banner.ok { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
   .banner.err { background: var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-border); }
-
-  input[type='range'] {
-    flex: 1;
-    accent-color: var(--accent);
-    min-width: 0;
-  }
-
-  .level-val {
-    color: var(--text-secondary);
-    font-family: var(--font-mono);
-    white-space: nowrap;
-    min-width: 52px;
-    text-align: right;
-  }
 
   .checkbox-row {
     display: flex;

@@ -51,8 +51,9 @@
 
 <style>
   .decode-list {
+    height: 100%;
+    min-height: 0;
     overflow-y: auto;
-    max-height: 500px;
     background: var(--bg-sunken);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -74,6 +75,9 @@
   }
 
   th {
+    position: sticky;
+    top: 0;
+    background: var(--surface-2);
     padding: var(--sp-1) var(--sp-2);
     text-align: left;
     color: var(--text-muted);
