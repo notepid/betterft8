@@ -30,6 +30,21 @@ jobs:
           workspaces: server
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libhamlib-dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install client deps
+        working-directory: client
+        run: npm ci
+      # The server embeds client/dist at compile time via rust-embed, so the
+      # client must be built before clippy/test or the embed derive fails to
+      # compile. This also validates the client build and lets svelte-check reuse
+      # the installed deps below.
+      - name: Build client
+        working-directory: client
+        run: npm run build
       # NOTE: rustfmt is non-blocking. The codebase predates any rustfmt discipline
       # and is not yet fully formatted; enforcing `--check` now would fail the job.
       # Run `cargo fmt` across the crate in a dedicated cleanup change, then drop
@@ -48,14 +63,6 @@ jobs:
       - name: Test
         working-directory: server
         run: cargo test
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: client/package-lock.json
-      - name: Install client deps
-        working-directory: client
-        run: npm ci
       - name: Svelte check
         working-directory: client
         run: npm run check
