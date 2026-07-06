@@ -53,72 +53,74 @@
   .decode-list {
     overflow-y: auto;
     max-height: 500px;
-    background: #0d0d1a;
-    border: 1px solid #2a2a4a;
-    border-radius: 4px;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
   }
 
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.8rem;
-    font-family: monospace;
+    font-size: var(--fs-200);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
   }
 
   thead tr {
     position: sticky;
     top: 0;
-    background: #1a1a3a;
+    background: var(--surface-2);
     z-index: 1;
   }
 
   th {
-    padding: 0.3rem 0.5rem;
+    padding: var(--sp-1) var(--sp-2);
     text-align: left;
-    color: #8888aa;
-    font-weight: normal;
-    border-bottom: 1px solid #2a2a4a;
+    color: var(--text-muted);
+    font-family: var(--font-ui);
+    font-weight: var(--fw-regular);
+    border-bottom: 1px solid var(--border);
     white-space: nowrap;
   }
 
   td {
-    padding: 0.2rem 0.5rem;
-    border-bottom: 1px solid #1a1a2e;
+    padding: 0.2rem var(--sp-2);
+    border-bottom: 1px solid var(--border);
     white-space: nowrap;
   }
 
   tr {
     cursor: pointer;
-    color: #c8c8e0;
+    color: var(--text-secondary);
   }
 
   tr:hover {
-    background: #1e1e3a;
+    background: var(--surface-3);
   }
 
   tr.selected {
-    background: #1a2a3a;
-    outline: 1px solid #3a5a8a;
+    background: var(--surface-2);
+    outline: 1px solid var(--accent);
   }
 
   .row-cq {
-    color: #7ec8e3;
+    color: var(--cq);
   }
 
   .row-mycall {
-    color: #f0f040;
-    font-weight: bold;
-    background: #1a2a1a;
+    color: var(--mycall);
+    font-weight: var(--fw-bold);
+    background: var(--surface-2);
   }
 
   .row-empty td {
     text-align: center;
-    color: #555577;
-    padding: 1rem;
+    color: var(--text-muted);
+    padding: var(--sp-4);
     cursor: default;
   }
 
-  .col-utc  { color: #888899; min-width: 5.5rem; }
+  .col-utc  { color: var(--text-muted); min-width: 5.5rem; }
   .col-snr  { text-align: right; min-width: 3rem; }
   .col-dt   { text-align: right; min-width: 3.5rem; }
   .col-freq { text-align: right; min-width: 3.5rem; }

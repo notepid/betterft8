@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import { client } from '../lib/websocket'
   import {
     configUpdateResult,
+    connected,
     deviceList,
     hamlibAvailable,
     myCall,
@@ -139,8 +141,22 @@
   let saving = false
   let saveError = ''
 
+  // Guard against the "Saving…" state hanging forever: a client-side timeout
+  // (and a lost-connection watcher below) will bail out if the server never
+  // confirms — e.g. if the socket drops mid-save on first run.
+  const SAVE_TIMEOUT_MS = 10000
+  let saveTimeout: ReturnType<typeof setTimeout> | null = null
+
+  function clearSaveTimeout() {
+    if (saveTimeout !== null) {
+      clearTimeout(saveTimeout)
+      saveTimeout = null
+    }
+  }
+
   $: if ($configUpdateResult && saving) {
     saving = false
+    clearSaveTimeout()
     if ($configUpdateResult.success) {
       saveError = ''
     } else {
@@ -148,10 +164,30 @@
     }
   }
 
+  // Bail out if the connection drops while a save is in flight.
+  $: if (saving && !$connected) {
+    saving = false
+    clearSaveTimeout()
+    saveError = 'Lost connection to the server before the save completed. Please check your connection and try again.'
+  }
+
+  // Cancel any pending timeout when leaving the review step so it can't fire spuriously.
+  $: step, clearSaveTimeout()
+
+  onDestroy(clearSaveTimeout)
+
   function save() {
     saving = true
     saveError = ''
     configUpdateResult.set(null)
+    clearSaveTimeout()
+    saveTimeout = setTimeout(() => {
+      saveTimeout = null
+      if (saving) {
+        saving = false
+        saveError = 'Timed out waiting for the server to confirm the save. Please check your connection and try again.'
+      }
+    }, SAVE_TIMEOUT_MS)
     client.completeSetup({
       callsign:          callsign.trim().toUpperCase(),
       grid:              grid.trim().toUpperCase(),
@@ -168,6 +204,8 @@
   }
 
   function close() {
+    clearSaveTimeout()
+    saving = false
     wizardOpen.set(false)
     step = 1
     saveError = ''
@@ -205,7 +243,7 @@
         </div>
         <div class="nav">
           <span></span>
-          <button class="btn-primary" on:click={next}>Get Started →</button>
+          <button class="btn btn--primary" on:click={next}>Get Started →</button>
         </div>
 
       <!-- ── Step 2: Station Identity ────────────────────────────── -->
@@ -215,6 +253,7 @@
         <label>
           Callsign
           <input
+            class="input"
             bind:value={callsign}
             maxlength="13"
             placeholder="W1AW"
@@ -226,6 +265,7 @@
         <label>
           Maidenhead Grid
           <input
+            class="input"
             bind:value={grid}
             maxlength="6"
             placeholder="FN31"
@@ -236,20 +276,20 @@
 
         <label>
           Operator Password
-          <input type="password" bind:value={password} placeholder="Choose a password" />
+          <input class="input" type="password" bind:value={password} placeholder="Choose a password" />
         </label>
 
         <label>
           Confirm Password
-          <input type="password" bind:value={passwordConfirm} placeholder="Repeat password" />
+          <input class="input" type="password" bind:value={passwordConfirm} placeholder="Repeat password" />
           {#if passwordError}<span class="error">{passwordError}</span>{/if}
         </label>
 
         <p class="hint">The operator password is required to control the radio and transmit.</p>
 
         <div class="nav">
-          <button class="btn-secondary" on:click={back}>← Back</button>
-          <button class="btn-primary" on:click={nextFromStation}>Next →</button>
+          <button class="btn btn--ghost" on:click={back}>← Back</button>
+          <button class="btn btn--primary" on:click={nextFromStation}>Next →</button>
         </div>
 
       <!-- ── Step 3: Audio Devices ────────────────────────────────── -->
@@ -258,7 +298,7 @@
 
         <label>
           Audio Input (receive)
-          <select bind:value={inputDevice}>
+          <select class="input" bind:value={inputDevice}>
             <option value="">— System default —</option>
             {#each $deviceList.inputs as dev}
               <option value={dev}>{dev}</option>
@@ -268,7 +308,7 @@
 
         <label>
           Audio Output (transmit)
-          <select bind:value={outputDevice}>
+          <select class="input" bind:value={outputDevice}>
             <option value="">— System default —</option>
             {#each $deviceList.outputs as dev}
               <option value={dev}>{dev}</option>
@@ -279,8 +319,8 @@
         <p class="hint">Audio changes take effect after restarting the server.</p>
 
         <div class="nav">
-          <button class="btn-secondary" on:click={back}>← Back</button>
-          <button class="btn-primary" on:click={next}>Next →</button>
+          <button class="btn btn--ghost" on:click={back}>← Back</button>
+          <button class="btn btn--primary" on:click={next}>Next →</button>
         </div>
 
       <!-- ── Step 4: Radio Setup ──────────────────────────────────── -->
@@ -312,12 +352,12 @@
 
           <label>
             rigctld Host
-            <input bind:value={rigctldHost} placeholder="localhost" />
+            <input class="input" bind:value={rigctldHost} placeholder="localhost" />
           </label>
 
           <label>
             rigctld Port
-            <input type="number" bind:value={rigctldPort} min="1" max="65535" />
+            <input class="input" type="number" bind:value={rigctldPort} min="1" max="65535" />
           </label>
 
           <button class="guide-toggle" on:click={() => showRigctldGuide = !showRigctldGuide}>
@@ -333,7 +373,7 @@
 
           <label>
             Rig Model
-            <select bind:value={rigModel}>
+            <select class="input" bind:value={rigModel}>
               {#each RIG_MODELS as r}
                 <option value={r.model}>{r.label} ({r.model})</option>
               {/each}
@@ -343,19 +383,19 @@
           <label>
             Serial Port
             <div class="port-row">
-              <select bind:value={serialPort}>
+              <select class="input" bind:value={serialPort}>
                 <option value="">— Select port —</option>
                 {#each $serialPorts as p}
                   <option value={p}>{p}</option>
                 {/each}
               </select>
-              <button class="btn-small" on:click={() => client.getSerialPorts()} title="Refresh port list">↻</button>
+              <button class="btn btn--icon" on:click={() => client.getSerialPorts()} title="Refresh port list">↻</button>
             </div>
           </label>
 
           <label>
             Baud Rate
-            <select bind:value={baudRate}>
+            <select class="input" bind:value={baudRate}>
               {#each BAUD_RATES as b}
                 <option value={b}>{b}</option>
               {/each}
@@ -364,8 +404,8 @@
         {/if}
 
         <div class="nav">
-          <button class="btn-secondary" on:click={back}>← Back</button>
-          <button class="btn-primary" on:click={next}>Next →</button>
+          <button class="btn btn--ghost" on:click={back}>← Back</button>
+          <button class="btn btn--primary" on:click={next}>Next →</button>
         </div>
 
       <!-- ── Step 5: Review & Save ─────────────────────────────────── -->
@@ -393,15 +433,15 @@
         {#if $configUpdateResult?.success}
           <div class="banner success">
             Setup saved. Restart the server to activate audio and radio settings.
-            <button class="btn-primary" style="margin-top:0.75rem" on:click={close}>Close</button>
+            <button class="btn btn--primary" style="margin-top:0.75rem" on:click={close}>Close</button>
           </div>
         {:else}
           {#if saveError}
             <div class="banner error-banner">{saveError}</div>
           {/if}
           <div class="nav">
-            <button class="btn-secondary" on:click={back}>← Back</button>
-            <button class="btn-primary" disabled={saving} on:click={save}>
+            <button class="btn btn--ghost" on:click={back}>← Back</button>
+            <button class="btn btn--primary" disabled={saving} on:click={save}>
               {saving ? 'Saving…' : 'Save & Finish'}
             </button>
           </div>
@@ -424,160 +464,118 @@
   }
 
   .wizard {
-    background: #16213e;
-    border: 1px solid #2a2a5a;
-    border-radius: 8px;
+    background: var(--surface-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-overlay);
     width: min(520px, 96vw);
     max-height: 90vh;
     overflow-y: auto;
-    padding: 2rem;
+    padding: var(--sp-6);
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-    color: #e0e0e0;
-    font-family: monospace;
+    gap: var(--sp-4);
+    color: var(--text-primary);
   }
 
   .dots {
     display: flex;
-    gap: 0.5rem;
+    gap: var(--sp-2);
     justify-content: center;
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--sp-2);
   }
 
   .dot {
     width: 10px;
     height: 10px;
-    border-radius: 50%;
-    background: #2a2a5a;
-    border: 1px solid #4a4a8a;
+    border-radius: var(--radius-pill);
+    background: var(--surface-3);
+    border: 1px solid var(--border-strong);
   }
-  .dot.done   { background: #27ae60; border-color: #27ae60; }
-  .dot.active { background: #7ec8e3; border-color: #7ec8e3; }
+  .dot.done   { background: var(--success); border-color: var(--success); }
+  .dot.active { background: var(--accent); border-color: var(--accent); }
 
   h2 {
     margin: 0;
-    font-size: 1.2rem;
-    color: #7ec8e3;
+    font-size: var(--fs-500);
+    color: var(--accent);
     text-align: center;
   }
 
   .intro {
     margin: 0;
-    color: #aaa;
-    line-height: 1.5;
+    color: var(--text-secondary);
+    line-height: var(--lh-normal);
     text-align: center;
   }
 
   .info-row {
     display: flex;
     justify-content: space-between;
-    padding: 0.4rem 0;
-    border-bottom: 1px solid #2a2a4a;
-    font-size: 0.9rem;
+    padding: var(--sp-1) 0;
+    border-bottom: 1px solid var(--border);
+    font-size: var(--fs-300);
   }
-  .info-row .label { color: #888; }
-  .info-row .value { color: #e0e0e0; }
+  .info-row .label { color: var(--text-muted); }
+  .info-row .value { color: var(--text-primary); font-family: var(--font-mono); }
 
   label {
     display: flex;
     flex-direction: column;
-    gap: 0.3rem;
-    font-size: 0.85rem;
-    color: #aaa;
+    gap: var(--sp-1);
+    font-size: var(--fs-300);
+    color: var(--text-secondary);
   }
 
-  input, select {
-    background: #0d0d1a;
-    border: 1px solid #2a2a5a;
-    border-radius: 4px;
-    color: #e0e0e0;
-    padding: 0.4rem 0.6rem;
-    font-family: monospace;
-    font-size: 0.9rem;
+  /* Form fields use the global .input primitive; only sizing is local. */
+  .input {
+    font-size: var(--fs-300);
+    padding: var(--sp-2) var(--sp-3);
   }
-  input:focus, select:focus {
-    outline: none;
-    border-color: #7ec8e3;
-  }
-  input:disabled, select:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .error {
-    color: #e74c3c;
-    font-size: 0.8rem;
+    color: var(--danger-text);
+    font-size: var(--fs-200);
   }
 
   .hint {
     margin: 0;
-    font-size: 0.8rem;
-    color: #666;
+    font-size: var(--fs-200);
+    color: var(--text-muted);
   }
 
   .nav {
     display: flex;
     justify-content: space-between;
-    margin-top: 0.5rem;
+    margin-top: var(--sp-2);
   }
 
-  .btn-primary {
-    background: #7ec8e3;
-    color: #0d0d1a;
-    border: none;
-    border-radius: 4px;
-    padding: 0.45rem 1.2rem;
-    font-family: monospace;
-    font-size: 0.9rem;
-    cursor: pointer;
-    font-weight: bold;
+  /* Give the wizard buttons more presence than the compact global default. */
+  .nav .btn,
+  .banner .btn {
+    padding: var(--sp-2) var(--sp-5);
+    font-size: var(--fs-300);
   }
-  .btn-primary:hover:not(:disabled) { background: #a0d8ef; }
-  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-  .btn-secondary {
-    background: transparent;
-    color: #7ec8e3;
-    border: 1px solid #7ec8e3;
-    border-radius: 4px;
-    padding: 0.45rem 1.2rem;
-    font-family: monospace;
-    font-size: 0.9rem;
-    cursor: pointer;
-  }
-  .btn-secondary:hover { background: rgba(126, 200, 227, 0.1); }
-
-  .btn-small {
-    background: #0d0d1a;
-    border: 1px solid #2a2a5a;
-    color: #7ec8e3;
-    border-radius: 4px;
-    padding: 0.4rem 0.6rem;
-    cursor: pointer;
-    font-size: 1rem;
-    line-height: 1;
-    flex-shrink: 0;
-  }
-  .btn-small:hover { border-color: #7ec8e3; }
 
   .backend-toggle {
     display: flex;
-    gap: 0.75rem;
+    gap: var(--sp-3);
   }
 
   .toggle-btn {
     flex: 1;
-    background: #0d0d1a;
-    border: 1px solid #2a2a5a;
-    color: #aaa;
-    border-radius: 4px;
-    padding: 0.6rem;
-    font-family: monospace;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-3);
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: var(--fs-200);
   }
   .toggle-btn.selected {
-    border-color: #7ec8e3;
-    color: #7ec8e3;
-    background: rgba(126, 200, 227, 0.08);
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--surface-2);
   }
   .toggle-btn:disabled {
     opacity: 0.4;
@@ -585,64 +583,69 @@
   }
 
   .tag {
-    font-size: 0.7rem;
-    background: #27ae60;
-    color: #fff;
-    border-radius: 3px;
+    font-size: var(--fs-100);
+    background: var(--success);
+    color: var(--accent-ink);
+    border-radius: var(--radius-sm);
     padding: 0.1rem 0.3rem;
-    margin-left: 0.3rem;
+    margin-left: var(--sp-1);
     vertical-align: middle;
   }
-  .tag.dim { background: #555; }
+  .tag.dim { background: var(--text-disabled); }
 
   .guide-toggle {
     background: none;
     border: none;
-    color: #7ec8e3;
+    color: var(--accent);
     cursor: pointer;
-    font-family: monospace;
-    font-size: 0.85rem;
+    font-size: var(--fs-200);
     padding: 0;
     text-align: left;
   }
   .guide-toggle:hover { text-decoration: underline; }
 
   .guide {
-    background: #0d0d1a;
-    border: 1px solid #2a2a5a;
-    border-radius: 4px;
-    padding: 0.75rem;
-    font-size: 0.8rem;
-    color: #aaa;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-200);
+    color: var(--text-secondary);
     white-space: pre-wrap;
     margin: 0;
   }
 
   .port-row {
     display: flex;
-    gap: 0.5rem;
+    gap: var(--sp-2);
   }
   .port-row select { flex: 1; }
 
   .summary {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.85rem;
+    font-size: var(--fs-300);
+    font-family: var(--font-mono);
   }
   .summary td {
-    padding: 0.35rem 0.5rem;
-    border-bottom: 1px solid #2a2a4a;
+    padding: var(--sp-1) var(--sp-2);
+    border-bottom: 1px solid var(--border);
   }
-  .summary td:first-child { color: #888; width: 45%; }
+  .summary td:first-child {
+    color: var(--text-muted);
+    font-family: var(--font-ui);
+    width: 45%;
+  }
 
   .banner {
-    padding: 0.75rem 1rem;
-    border-radius: 4px;
-    font-size: 0.9rem;
+    padding: var(--sp-3) var(--sp-4);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-300);
     display: flex;
     flex-direction: column;
     align-items: flex-start;
   }
-  .banner.success     { background: #1a3a1a; border: 1px solid #27ae60; color: #aaffaa; }
-  .banner.error-banner { background: #3a1a1a; border: 1px solid #e74c3c; color: #ffaaaa; }
+  .banner.success     { background: var(--success-bg); border: 1px solid var(--success-border); color: var(--success-text); }
+  .banner.error-banner { background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger-text); }
 </style>

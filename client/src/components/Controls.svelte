@@ -48,7 +48,7 @@
   <label class="freq-label">
     <span class="label-text">TX Hz</span>
     <input
-      class="tx-freq-input"
+      class="input tx-freq-input u-mono"
       type="number"
       min="200"
       max="3000"
@@ -61,13 +61,13 @@
   <!-- Period selector -->
   <div class="parity-group" title="Select TX period (even=0,30s / odd=15,45s past minute)">
     <button
-      class="parity-btn"
+      class="btn btn--ghost parity-btn"
       class:active={!parityOdd}
       onclick={() => setParity(false)}
       disabled={!canControl}
     >Even</button>
     <button
-      class="parity-btn"
+      class="btn btn--ghost parity-btn"
       class:active={parityOdd}
       onclick={() => setParity(true)}
       disabled={!canControl}
@@ -76,7 +76,7 @@
 
   <!-- Call CQ -->
   <button
-    class="btn btn-cq"
+    class="btn btn--primary"
     onclick={callCq}
     disabled={transmitting || !canControl}
     title={!$connected ? 'Disconnected — cannot transmit' : isOperator ? 'Call CQ on TX frequency' : 'Claim operator to control TX'}
@@ -84,7 +84,7 @@
 
   <!-- Halt TX -->
   <button
-    class="btn btn-halt"
+    class="btn btn--danger"
     onclick={haltTx}
     disabled={!canControl}
     title={!$connected ? 'Disconnected — cannot transmit' : isOperator ? 'Emergency stop TX' : 'Claim operator to control TX'}
@@ -92,7 +92,7 @@
 
   <!-- Reset QSO -->
   <button
-    class="btn btn-reset"
+    class="btn btn--ghost"
     onclick={resetQso}
     disabled={!canControl}
     title={!$connected ? 'Disconnected — cannot transmit' : isOperator ? 'Clear QSO state and stop TX' : 'Claim operator to control TX'}
@@ -100,9 +100,9 @@
 
   <!-- TX status badge -->
   {#if transmitting}
-    <span class="tx-badge">TX</span>
+    <span class="badge badge--tx tx-badge">TX</span>
   {:else if txQueued}
-    <span class="queued-badge">QUEUED</span>
+    <span class="badge badge--warn">QUEUED</span>
   {/if}
 
   <!-- Command send failure (e.g. socket down) -->
@@ -116,157 +116,72 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 0.5rem;
-    background: #16213e;
-    border: 1px solid #2a2a5a;
-    border-radius: 4px;
-    padding: 0.4rem 0.75rem;
+    gap: var(--sp-2);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--sp-2) var(--sp-3);
   }
 
   .toggle-label {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: var(--sp-1);
     cursor: pointer;
     user-select: none;
   }
 
   .toggle-label input[type="checkbox"] {
-    accent-color: #27ae60;
+    accent-color: var(--success);
     width: 1rem;
     height: 1rem;
     cursor: pointer;
   }
 
   .toggle-text {
-    font-size: 0.8rem;
-    font-weight: bold;
-    color: #a0d8c0;
+    font-size: var(--fs-200);
+    font-weight: var(--fw-bold);
+    color: var(--success-text);
     min-width: 4.5rem;
   }
 
   .freq-label {
     display: flex;
     align-items: center;
-    gap: 0.3rem;
+    gap: var(--sp-1);
   }
 
   .label-text {
-    font-size: 0.75rem;
-    color: #888;
+    font-size: var(--fs-100);
+    color: var(--text-muted);
   }
 
   .tx-freq-input {
-    background: #0d0d2b;
-    border: 1px solid #3a3a6a;
-    border-radius: 3px;
-    color: #c8d8f0;
-    font-family: monospace;
-    font-size: 0.85rem;
-    padding: 0.15rem 0.35rem;
     width: 5.5rem;
   }
 
   .parity-group {
     display: flex;
-    gap: 0;
-    border: 1px solid #3a3a6a;
-    border-radius: 3px;
-    overflow: hidden;
+    gap: var(--sp-1);
   }
 
   .parity-btn {
-    background: #1e2a4a;
-    border: none;
-    color: #7888aa;
-    font-family: monospace;
-    font-size: 0.75rem;
-    padding: 0.2rem 0.55rem;
-    cursor: pointer;
-    transition: background 0.1s;
-  }
-
-  .parity-btn:first-child {
-    border-right: 1px solid #3a3a6a;
+    font-size: var(--fs-100);
   }
 
   .parity-btn.active {
-    background: #2a4a8a;
-    color: #b0d0ff;
-  }
-
-  .parity-btn:hover:not(.active) {
-    background: #253a6a;
-  }
-
-  .btn {
-    border: none;
-    border-radius: 3px;
-    font-family: monospace;
-    font-size: 0.8rem;
-    padding: 0.25rem 0.65rem;
-    cursor: pointer;
-    transition: background 0.1s, opacity 0.1s;
-  }
-
-  .btn:disabled {
-    opacity: 0.4;
-    cursor: default;
-  }
-
-  .btn-cq {
-    background: #1a5a3a;
-    color: #80e8b0;
-    border: 1px solid #2a8a5a;
-  }
-
-  .btn-cq:hover:not(:disabled) {
-    background: #246a46;
-  }
-
-  .btn-halt {
-    background: #5a1a1a;
-    color: #f08080;
-    border: 1px solid #8a2a2a;
-    font-weight: bold;
-  }
-
-  .btn-halt:hover {
-    background: #6a2020;
-  }
-
-  .btn-reset {
-    background: #2a2a4a;
-    color: #8888aa;
-    border: 1px solid #3a3a6a;
-  }
-
-  .btn-reset:hover {
-    background: #3a3a5a;
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   .tx-badge {
-    background: #c0392b;
-    color: #fff;
-    font-size: 0.7rem;
-    font-weight: bold;
-    border-radius: 3px;
-    padding: 0.1rem 0.4rem;
     animation: blink 0.8s step-end infinite;
   }
 
-  .queued-badge {
-    background: #7d6608;
-    color: #ffe;
-    font-size: 0.7rem;
-    border-radius: 3px;
-    padding: 0.1rem 0.4rem;
-  }
-
   .cmd-error {
-    color: #f08080;
-    font-size: 0.75rem;
-    font-weight: bold;
+    color: var(--danger-text);
+    font-size: var(--fs-100);
+    font-weight: var(--fw-bold);
   }
 
   @keyframes blink {

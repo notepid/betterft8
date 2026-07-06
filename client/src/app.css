@@ -1,0 +1,275 @@
+/*
+ * BetterFT8 design tokens + global primitives.
+ *
+ * Single source of truth for colour, type, spacing, and the shared component
+ * primitives (.btn, .badge, .card, form inputs). Components reference these
+ * tokens/classes instead of hardcoding values. No web fonts — CSP-safe system
+ * stacks only. Dark is the default; a light theme is available via
+ * prefers-color-scheme or an explicit [data-theme] on :root.
+ */
+
+:root {
+  /* ---- Surface / background layers (darkest -> lightest) ---- */
+  --bg-base: #13131f;      /* app canvas */
+  --bg-sunken: #0d0d18;    /* inputs, decode list, waterfall well */
+  --surface-1: #1a1a2e;    /* primary panels */
+  --surface-2: #212140;    /* raised panels / sticky headers */
+  --surface-3: #2a2a4a;    /* hover fills, inert buttons */
+
+  /* ---- Borders / hairlines ---- */
+  --border: #2c2c4e;
+  --border-strong: #3a3a6a;
+
+  /* ---- Text (contrast checked against --bg-base / --surface-1) ---- */
+  --text-primary: #e8e8f2;
+  --text-secondary: #b7b7d0;
+  --text-muted: #8b8bae;      /* AA floor for small text */
+  --text-disabled: #5c5c78;   /* non-text / off states only */
+
+  /* ---- Accent / brand ---- */
+  --accent: #7ec8e3;
+  --accent-hover: #a6dcf0;
+  --accent-ink: #0d0d1a;      /* text on a filled accent surface */
+
+  /* ---- Semantic ---- */
+  --success: #2ecc71;
+  --success-bg: #12331f;
+  --success-border: #216b3a;
+  --success-text: #7fe0a6;
+  --warn: #e0a63b;
+  --warn-bg: #33280d;
+  --warn-border: #6b531e;
+  --warn-text: #f0c66b;
+  --danger: #e05252;
+  --danger-bg: #3a1414;
+  --danger-border: #7a2a2a;
+  --danger-text: #f08a8a;
+  --info: var(--accent);
+
+  /* ---- Domain-specific ---- */
+  --tx-active: #ff3ad2;                     /* the single "on the air" colour */
+  --tx-active-bg: rgba(255, 58, 210, 0.16);
+  --role-operator: var(--success);
+  --role-viewer: #7a86c4;
+  --cq: #37e39b;                            /* CQ rows + waterfall overlay */
+  --mycall: #f5d54a;                        /* my-call highlight */
+  --waterfall-bg: #000010;                  /* data surface; never themed */
+
+  /* ---- Radius / elevation ---- */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-pill: 999px;
+  --shadow-overlay: 0 8px 30px rgba(0, 0, 0, 0.5);
+
+  /* ---- Type ---- */
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", "Consolas", "Roboto Mono", monospace;
+
+  --fs-100: 0.72rem;
+  --fs-200: 0.8rem;
+  --fs-300: 0.875rem;
+  --fs-400: 1rem;
+  --fs-500: 1.25rem;
+  --fs-600: 1.5rem;
+  --fs-700: 2rem;
+  --lh-tight: 1.2;
+  --lh-normal: 1.5;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-bold: 700;
+
+  /* ---- Spacing (4px base) ---- */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.5rem;
+  --sp-6: 2rem;
+}
+
+/* Light theme — dark stays the default for a spectrogram-centric app; this is
+ * applied only when the OS prefers light AND the user hasn't forced a theme,
+ * or when [data-theme="light"] is set explicitly. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg-base: #f4f5f8;
+    --bg-sunken: #e9ebf0;
+    --surface-1: #ffffff;
+    --surface-2: #f0f2f7;
+    --surface-3: #e2e5ee;
+    --border: #d5d9e4;
+    --border-strong: #b9bfd0;
+    --text-primary: #1a1d29;
+    --text-secondary: #414861;
+    --text-muted: #5f6580;
+    --text-disabled: #9aa0b5;
+    --accent: #1d7fa6;
+    --accent-hover: #15617f;
+    --accent-ink: #ffffff;
+    --success: #1e9e57;
+    --danger: #c73838;
+    --warn: #b5760a;
+  }
+}
+
+:root[data-theme="light"] {
+  --bg-base: #f4f5f8;
+  --bg-sunken: #e9ebf0;
+  --surface-1: #ffffff;
+  --surface-2: #f0f2f7;
+  --surface-3: #e2e5ee;
+  --border: #d5d9e4;
+  --border-strong: #b9bfd0;
+  --text-primary: #1a1d29;
+  --text-secondary: #414861;
+  --text-muted: #5f6580;
+  --text-disabled: #9aa0b5;
+  --accent: #1d7fa6;
+  --accent-hover: #15617f;
+  --accent-ink: #ffffff;
+  --success: #1e9e57;
+  --danger: #c73838;
+  --warn: #b5760a;
+}
+
+/* ---- Global base ---- */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--fs-300);
+  line-height: var(--lh-normal);
+}
+
+h1, h2, h3 {
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  line-height: var(--lh-tight);
+}
+
+/* Data readouts opt into monospace. */
+.u-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* App-wide keyboard focus ring (previously missing on every control). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ---- Buttons: 4 variants, token-driven ---- */
+.btn {
+  font: var(--fw-medium) var(--fs-200) / 1 var(--font-ui);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-3);
+  min-height: 1.75rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+}
+.btn:hover:not(:disabled) {
+  background: var(--border-strong);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn--ghost {
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  border-color: var(--border-strong);
+}
+
+.btn--danger {
+  background: transparent;
+  color: var(--danger-text);
+  border-color: var(--danger-border);
+}
+.btn--danger:hover:not(:disabled) {
+  background: var(--danger-bg);
+}
+
+.btn--icon {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  min-width: 1.75rem;
+  padding: var(--sp-1);
+}
+.btn--icon:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  background: none;
+}
+
+/* ---- Badges / pills ---- */
+.badge {
+  font: var(--fw-bold) var(--fs-100) / 1 var(--font-ui);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+.badge--success { background: var(--success-bg); color: var(--success-text); }
+.badge--warn { background: var(--warn-bg); color: var(--warn-text); }
+.badge--danger { background: var(--danger-bg); color: var(--danger-text); }
+.badge--tx { background: var(--tx-active-bg); color: var(--tx-active); border-radius: var(--radius-sm); }
+
+/* ---- Panels / cards ---- */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3);
+}
+
+/* ---- Form inputs ---- */
+.input {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-200);
+  padding: var(--sp-1) var(--sp-2);
+}
+.input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* ---- Motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

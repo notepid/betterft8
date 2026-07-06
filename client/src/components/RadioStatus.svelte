@@ -17,6 +17,13 @@
 
   let editing = false
   let editValue = ''
+  // Set when Escape is pressed so the ensuing onblur->commitEdit cancels
+  // instead of committing the typed value.
+  let cancelling = false
+
+  // Widest FT8 band segment span (Hz) used to decide which band button is
+  // "current" — bands are spaced far wider apart than this, so no overlap.
+  const BAND_TOLERANCE_HZ = 500_000
 
   function formatFreq(hz: number): string {
     const mhz = hz / 1_000_000
@@ -37,7 +44,15 @@
   }
 
   function commitEdit() {
+    // Enter commits then unmounts the input, whose onblur calls commitEdit
+    // again; this guard makes the trailing call a no-op so we send only once.
+    if (!editing) return
     editing = false
+    // Escape flagged a cancel; swallow the commit without sending.
+    if (cancelling) {
+      cancelling = false
+      return
+    }
     const hz = Math.round(parseFloat(editValue) * 1_000_000)
     if (hz > 0) {
       client.send({ type: 'set_frequency', freq: hz })
@@ -46,11 +61,21 @@
 
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter') commitEdit()
-    else if (e.key === 'Escape') editing = false
+    else if (e.key === 'Escape') {
+      cancelling = true
+      commitEdit()
+    }
   }
 
   function setBand(freq: number) {
     client.send({ type: 'set_frequency', freq })
+  }
+
+  // A band button is "current" when the radio's tuned frequency sits within a
+  // band's FT8 segment tolerance.
+  $: currentFreq = $radioStatus?.freq ?? 0
+  function isCurrentBand(bandFreq: number): boolean {
+    return !!$radioStatus?.connected && Math.abs(currentFreq - bandFreq) < BAND_TOLERANCE_HZ
   }
 </script>
 
@@ -60,7 +85,7 @@
       {#if $radioStatus?.connected}
         {#if editing}
           <input
-            class="freq-input"
+            class="input freq-input u-mono"
             bind:value={editValue}
             onblur={commitEdit}
             onkeydown={onKeydown}
@@ -68,13 +93,13 @@
           />
           <span class="freq-unit">MHz</span>
         {:else}
-          <button class="freq-display" onclick={startEdit} title={isOperator ? 'Click to edit frequency' : 'Claim operator to change frequency'} class:locked={!isOperator}>
+          <button class="freq-display u-mono" onclick={startEdit} title={isOperator ? 'Click to edit frequency' : 'Claim operator to change frequency'} class:locked={!isOperator}>
             {formatFreq($radioStatus.freq)}
           </button>
         {/if}
         <span class="mode">{$radioStatus.mode}</span>
         {#if $radioStatus.ptt}
-          <span class="ptt-indicator" title="Transmitting">TX</span>
+          <span class="badge badge--tx ptt-indicator" title="Transmitting">TX</span>
         {/if}
       {:else}
         <span class="no-radio">No radio</span>
@@ -85,7 +110,8 @@
   <div class="band-buttons">
     {#each FT8_BANDS as band}
       <button
-        class="band-btn"
+        class="btn btn--ghost band-btn"
+        class:active={isCurrentBand(band.freq)}
         onclick={() => setBand(band.freq)}
         disabled={!$radioStatus?.connected || !isOperator}
         title={isOperator ? `${band.freq / 1_000_000} MHz` : 'Claim operator to change band'}
@@ -98,41 +124,40 @@
 
 <style>
   .radio-panel {
-    background: #16213e;
-    border: 1px solid #2a2a5a;
-    border-radius: 4px;
-    padding: 0.5rem 0.75rem;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--sp-2) var(--sp-3);
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: var(--sp-2);
   }
 
   .top-row {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: var(--sp-3);
   }
 
   .freq-block {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--sp-2);
   }
 
   .freq-display {
     background: none;
     border: none;
     cursor: pointer;
-    font-family: monospace;
-    font-size: 1.4rem;
-    font-weight: bold;
-    color: #7ec8e3;
+    font-size: var(--fs-600);
+    font-weight: var(--fw-bold);
+    color: var(--accent);
     padding: 0;
     letter-spacing: 0.04em;
   }
 
   .freq-display:hover {
-    color: #a8e0f0;
+    color: var(--accent-hover);
   }
 
   .freq-display.locked {
@@ -141,40 +166,30 @@
   }
 
   .freq-display.locked:hover {
-    color: #7ec8e3;
+    color: var(--accent);
   }
 
   .freq-input {
-    background: #0d0d2b;
-    border: 1px solid #7ec8e3;
-    border-radius: 3px;
-    color: #7ec8e3;
-    font-family: monospace;
-    font-size: 1.3rem;
-    padding: 0.1rem 0.3rem;
+    color: var(--accent);
+    border-color: var(--accent);
+    font-size: var(--fs-500);
     width: 10rem;
   }
 
   .freq-unit {
-    color: #888;
-    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-size: var(--fs-200);
   }
 
   .mode {
-    font-size: 0.9rem;
-    color: #aaa;
-    background: #1e1e4a;
-    border-radius: 3px;
-    padding: 0.1rem 0.4rem;
+    font-size: var(--fs-300);
+    color: var(--text-secondary);
+    background: var(--surface-2);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-1) var(--sp-2);
   }
 
   .ptt-indicator {
-    background: #c0392b;
-    color: #fff;
-    font-size: 0.75rem;
-    font-weight: bold;
-    border-radius: 3px;
-    padding: 0.15rem 0.4rem;
     animation: blink 0.8s step-end infinite;
   }
 
@@ -184,36 +199,23 @@
   }
 
   .no-radio {
-    color: #666;
-    font-size: 0.95rem;
+    color: var(--text-muted);
+    font-size: var(--fs-300);
     font-style: italic;
   }
 
   .band-buttons {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.3rem;
+    gap: var(--sp-1);
   }
 
   .band-btn {
-    background: #1e2a4a;
-    border: 1px solid #2e4a7a;
-    border-radius: 3px;
-    color: #a0b8d8;
-    font-family: monospace;
-    font-size: 0.75rem;
-    padding: 0.2rem 0.45rem;
-    cursor: pointer;
-    transition: background 0.1s;
+    font-size: var(--fs-100);
   }
 
-  .band-btn:hover:not(:disabled) {
-    background: #2a3e6a;
-    color: #c0d8f0;
-  }
-
-  .band-btn:disabled {
-    opacity: 0.35;
-    cursor: default;
+  .band-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
   }
 </style>

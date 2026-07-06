@@ -53,6 +53,7 @@ class BetterFT8Client {
   private lastMessageAt = 0
   private streaming = false
   private watchdogTimer: ReturnType<typeof setInterval> | null = null
+  private cmdErrorTimer: ReturnType<typeof setTimeout> | null = null
   private stableTimer: ReturnType<typeof setTimeout> | null = null
 
   connect() {
@@ -232,10 +233,22 @@ class BetterFT8Client {
   send(msg: ClientMessage): boolean {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg))
+      // A successful send clears any stale "command not sent" notice.
+      if (this.cmdErrorTimer) {
+        clearTimeout(this.cmdErrorTimer)
+        this.cmdErrorTimer = null
+      }
+      commandError.set(null)
       return true
     }
-    // Socket is down — surface the failure instead of silently dropping.
+    // Socket is down — surface the failure instead of silently dropping, and
+    // auto-dismiss it so it doesn't stay pinned after the link recovers.
     commandError.set('Not connected — command not sent')
+    if (this.cmdErrorTimer) clearTimeout(this.cmdErrorTimer)
+    this.cmdErrorTimer = setTimeout(() => {
+      commandError.set(null)
+      this.cmdErrorTimer = null
+    }, 4000)
     return false
   }
 

@@ -10,6 +10,20 @@
   let imageData: ImageData | null = null
   let currentFreqMax = 5000
 
+  // Canvas draw colours, kept in sync with the app.css domain palette.
+  // These are JS string colours (not CSS), so they mirror the token values.
+  const CQ_COLOR = '#37e39b' // matches --cq
+  const TX_BAND_COLOR = '#ff3ad2' // matches --tx-active
+  // The canvas background well uses --waterfall-bg (#000010) via CSS on .waterfall-wrap.
+
+  // Apply an alpha to one of the hex domain colours for canvas fills/strokes.
+  function withAlpha(hex: string, alpha: number): string {
+    const r = parseInt(hex.slice(1, 3), 16)
+    const g = parseInt(hex.slice(3, 5), 16)
+    const b = parseInt(hex.slice(5, 7), 16)
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }
+
   // Overlay: decodes from the most-recent period(s), up to ~30 s old.
   let overlayDecodes: Array<{ freq: number; message: string; period: number }> = []
 
@@ -38,12 +52,23 @@
   let smoothCeiling = 255
   let autoLevelInitialized = false
 
-  function autoLevel(srcArr: Uint8Array) {
+  // Change-guard: last rounded dB values actually pushed to the stores, so we
+  // only write (and rebuild the remap LUT / re-render the sliders) on a change.
+  let lastFloorDb = NaN
+  let lastCeilingDb = NaN
+
+  // Persistent scratch buffers reused across frames to avoid per-frame allocs.
+  const histScratch = new Uint32Array(256)
+  let scratchSrc = new Uint8Array(0)
+  let frameCount = 0
+
+  function autoLevel(srcArr: Uint8Array, numBins: number) {
     if (!$waterfallAutoLevel) return
 
-    // Build a simple histogram
-    const hist = new Uint32Array(256)
-    for (let i = 0; i < srcArr.length; i++) {
+    // Build a simple histogram (reuse the persistent buffer)
+    const hist = histScratch
+    hist.fill(0)
+    for (let i = 0; i < numBins; i++) {
       hist[srcArr[i]]++
     }
 
@@ -58,7 +83,7 @@
     }
 
     // Find P95 of the distribution (signal level estimate)
-    const total = srcArr.length
+    const total = numBins
     let cumulative = 0
     let p95Bin = 255
     for (let i = 0; i < 256; i++) {
@@ -79,17 +104,29 @@
     smoothCeiling = smoothCeiling + alpha * (targetCeiling - smoothCeiling)
     autoLevelInitialized = true
 
-    // Convert u8 back to dB for the store
-    const floorDb = Math.round((smoothFloor / 255) * 120 - 120)
-    const ceilingDb = Math.round((smoothCeiling / 255) * 120 - 120)
+    // Convert u8 back to dB and clamp to the slider ranges
+    const floorDb = Math.max(-120, Math.min(-1, Math.round((smoothFloor / 255) * 120 - 120)))
+    const ceilingDb = Math.max(-119, Math.min(0, Math.round((smoothCeiling / 255) * 120 - 120)))
 
-    waterfallFloor.set(Math.max(-120, Math.min(-1, floorDb)))
-    waterfallCeiling.set(Math.max(-119, Math.min(0, ceilingDb)))
+    // Only write when the rounded value actually changed — avoids ~20 store
+    // writes/sec that would otherwise rebuild the remap LUT and re-render the
+    // bound sliders/labels every frame for no visible difference.
+    if (floorDb !== lastFloorDb) {
+      lastFloorDb = floorDb
+      waterfallFloor.set(floorDb)
+    }
+    if (ceilingDb !== lastCeilingDb) {
+      lastCeilingDb = ceilingDb
+      waterfallCeiling.set(ceilingDb)
+    }
   }
 
-  // Reset smoothing when auto-level is toggled on
+  // Reset smoothing (and the change-guard) when auto-level is toggled on so the
+  // first frame re-initialises and force-writes the freshly computed levels.
   $: if ($waterfallAutoLevel) {
     autoLevelInitialized = false
+    lastFloorDb = NaN
+    lastCeilingDb = NaN
   }
 
   function buildColorLut(scheme: string): Uint8ClampedArray {
@@ -162,16 +199,26 @@
       }
     }
 
-    // Decode base64 → Uint8Array
+    // Decode base64 → Uint8Array (reuse the scratch buffer, grow only if needed)
     const binaryStr = atob(msg.data)
-    const srcArr = new Uint8Array(binaryStr.length)
-    for (let i = 0; i < binaryStr.length; i++) {
+    const numBins = binaryStr.length
+    if (scratchSrc.length < numBins) {
+      scratchSrc = new Uint8Array(numBins)
+    }
+    const srcArr = scratchSrc
+    for (let i = 0; i < numBins; i++) {
       srcArr[i] = binaryStr.charCodeAt(i)
     }
-    const numBins = srcArr.length
 
-    // Auto-level: adapt floor/ceiling from signal statistics
-    autoLevel(srcArr)
+    // Auto-level: adapt floor/ceiling from signal statistics. The recompute is
+    // throttled to ~1 Hz (every 10th ~100ms frame); the smoothing alpha is small
+    // so the slower adaptation is visually identical. The first frame after
+    // enabling always runs so levels initialise immediately. Drawing below still
+    // happens every frame.
+    if ($waterfallAutoLevel && (!autoLevelInitialized || frameCount % 10 === 0)) {
+      autoLevel(srcArr, numBins)
+    }
+    frameCount++
 
     // Scroll existing rows down by one row
     imageData.data.copyWithin(w * 4, 0)
@@ -225,7 +272,7 @@
 
       const x = Math.round((d.freq / freqMax) * w)
       const isCq = d.message.toUpperCase().startsWith('CQ ')
-      const color = isCq ? `rgba(0,255,136,${alpha})` : `rgba(255,255,200,${alpha * 0.9})`
+      const color = isCq ? withAlpha(CQ_COLOR, alpha) : `rgba(255,255,200,${alpha * 0.9})`
 
       // Vertical tick mark below the freq axis
       ctx.strokeStyle = color
@@ -254,12 +301,12 @@
 
     ctx.save()
 
-    // Semitransparent band fill — bright magenta for visibility
-    ctx.fillStyle = 'rgba(255, 0, 200, 0.18)'
+    // Semitransparent band fill — the "on the air" TX colour for visibility
+    ctx.fillStyle = withAlpha(TX_BAND_COLOR, 0.18)
     ctx.fillRect(xLo, 0, bandW, h)
 
     // Solid edge lines (thick for visibility)
-    ctx.strokeStyle = 'rgba(255, 50, 220, 0.9)'
+    ctx.strokeStyle = withAlpha(TX_BAND_COLOR, 0.9)
     ctx.lineWidth = 2
     ctx.beginPath()
     ctx.moveTo(xLo + 0.5, 0)
@@ -272,7 +319,7 @@
 
     // Labels at bottom showing lower and upper frequencies
     ctx.font = '10px monospace'
-    ctx.fillStyle = 'rgba(255, 120, 240, 0.95)'
+    ctx.fillStyle = withAlpha(TX_BAND_COLOR, 0.95)
     const loLabel = `${freqLo}`
     const hiLabel = `${freqHi}`
     const loTextW = ctx.measureText(loLabel).width
@@ -359,9 +406,9 @@
 <style>
   .waterfall-wrap {
     width: 100%;
-    background: #000;
-    border: 1px solid #2a2a4a;
-    border-radius: 4px;
+    background: var(--waterfall-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     overflow: hidden;
   }
 

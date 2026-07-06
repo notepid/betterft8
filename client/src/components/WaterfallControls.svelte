@@ -39,28 +39,28 @@
     </label>
   </div>
 
-  <button class="reset-btn" on:click={resetDefaults} title="Reset to defaults">Reset</button>
+  <button class="btn" on:click={resetDefaults} title="Reset to defaults">Reset</button>
 </div>
 
 <style>
   .wf-controls {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.3rem 0.6rem;
-    background: #12122a;
-    border: 1px solid #2a2a4a;
+    gap: var(--sp-3);
+    padding: var(--sp-1) var(--sp-2);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
     border-top: none;
-    border-radius: 0 0 4px 4px;
-    font-family: monospace;
-    font-size: 0.75rem;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: var(--fs-100);
     flex-wrap: wrap;
   }
 
   .ctrl-group {
     display: flex;
     align-items: center;
-    gap: 0.3rem;
+    gap: var(--sp-1);
   }
 
   .slider-group {
@@ -69,24 +69,24 @@
   }
 
   label {
-    color: #8888aa;
+    color: var(--text-muted);
     white-space: nowrap;
-    font-size: 0.72rem;
+    font-size: var(--fs-100);
   }
 
   select {
-    background: #0d0d1a;
-    border: 1px solid #2a2a4a;
-    color: #e0e0e0;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border-strong);
+    color: var(--text-primary);
     padding: 0.1rem 0.2rem;
-    border-radius: 3px;
-    font-family: monospace;
-    font-size: 0.72rem;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: var(--fs-100);
   }
 
   input[type='range'] {
     flex: 1;
-    accent-color: #7ec8e3;
+    accent-color: var(--accent);
     min-width: 0;
     height: 14px;
   }
@@ -96,34 +96,23 @@
   }
 
   .val {
-    color: #aaa;
-    font-family: monospace;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     min-width: 30px;
     text-align: right;
-    font-size: 0.72rem;
+    font-size: var(--fs-100);
   }
 
   .auto-label {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
-    color: #c0c0d8;
+    gap: var(--sp-1);
+    color: var(--text-secondary);
     cursor: pointer;
   }
 
   .auto-label input[type='checkbox'] {
-    accent-color: #7ec8e3;
+    accent-color: var(--accent);
   }
-
-  .reset-btn {
-    background: #2a2a4a;
-    border: 1px solid #3a3a6a;
-    color: #8888aa;
-    padding: 0.15rem 0.4rem;
-    border-radius: 3px;
-    cursor: pointer;
-    font-family: monospace;
-    font-size: 0.7rem;
-  }
-  .reset-btn:hover { background: #3a3a6a; color: #e0e0e0; }
 </style>

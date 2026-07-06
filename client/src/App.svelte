@@ -24,12 +24,17 @@
 <main>
   <header>
     <h1>BetterFT8</h1>
-    <span class="status" class:online={$connected} title={$connected ? 'Connected' : 'Disconnected'}>
+    <span
+      class="badge"
+      class:badge--success={$connected}
+      class:badge--danger={!$connected}
+      title={$connected ? 'Connected' : 'Disconnected'}
+    >
       {$connected ? 'Connected' : 'Disconnected'}
     </span>
     <Login />
     <button
-      class="settings-btn"
+      class="btn btn--icon settings-btn"
       title="Settings"
       on:click={() => settingsOpen.update((v) => !v)}
     >
@@ -67,84 +72,54 @@
 <SetupWizard />
 
 <style>
-  :global(body) {
-    margin: 0;
-    background: #1a1a2e;
-    color: #e0e0e0;
-    font-family: monospace;
-  }
-
   main {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 1rem 1.5rem;
+    padding: var(--sp-4) var(--sp-5);
   }
 
   header {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    margin-bottom: 1rem;
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-4);
     flex-wrap: wrap;
   }
 
   h1 {
     margin: 0;
-    font-size: 1.5rem;
-    color: #7ec8e3;
-  }
-
-  .status {
-    padding: 0.25rem 0.75rem;
-    border-radius: 999px;
-    font-size: 0.8rem;
-    background: #c0392b;
-    color: #fff;
-  }
-
-  .status.online {
-    background: #27ae60;
+    font-size: var(--fs-600);
+    color: var(--accent);
   }
 
   .settings-btn {
     margin-left: auto;
-    background: none;
-    border: 1px solid #2a2a4a;
-    color: #8888aa;
-    font-size: 1.1rem;
-    cursor: pointer;
-    border-radius: 4px;
-    padding: 0.2rem 0.5rem;
-    line-height: 1;
-  }
-  .settings-btn:hover {
-    color: #e0e0e0;
-    border-color: #4a4a8a;
+    font-size: var(--fs-500);
   }
 
   .radio-section {
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--sp-2);
   }
 
   .controls-section {
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--sp-2);
   }
 
   .qso-section {
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--sp-3);
   }
 
   .waterfall-section {
-    margin-bottom: 1rem;
+    margin-bottom: var(--sp-4);
   }
 
   .decode-section {
-    margin-top: 1rem;
+    margin-top: var(--sp-4);
   }
 
   .decode-section h2 {
-    font-size: 0.9rem;
-    color: #888;
-    margin: 0 0 0.4rem;
+    font-size: var(--fs-300);
+    color: var(--text-muted);
+    margin: 0 0 var(--sp-2);
   }
 </style>
