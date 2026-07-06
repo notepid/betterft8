@@ -87,31 +87,10 @@
   --sp-6: 2rem;
 }
 
-/* Light theme — dark stays the default for a spectrogram-centric app; this is
- * applied only when the OS prefers light AND the user hasn't forced a theme,
- * or when [data-theme="light"] is set explicitly. */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) {
-    --bg-base: #f4f5f8;
-    --bg-sunken: #e9ebf0;
-    --surface-1: #ffffff;
-    --surface-2: #f0f2f7;
-    --surface-3: #e2e5ee;
-    --border: #d5d9e4;
-    --border-strong: #b9bfd0;
-    --text-primary: #1a1d29;
-    --text-secondary: #414861;
-    --text-muted: #5f6580;
-    --text-disabled: #9aa0b5;
-    --accent: #1d7fa6;
-    --accent-hover: #15617f;
-    --accent-ink: #ffffff;
-    --success: #1e9e57;
-    --danger: #c73838;
-    --warn: #b5760a;
-  }
-}
-
+/* Light theme — dark is the UNCONDITIONAL default for this spectrogram-centric
+ * app (dim shacks, night operating), so we deliberately do NOT auto-switch on
+ * `prefers-color-scheme: light`. Light is available only as an explicit opt-in
+ * via [data-theme="light"], ready for a future theme toggle. */
 :root[data-theme="light"] {
   --bg-base: #f4f5f8;
   --bg-sunken: #e9ebf0;
