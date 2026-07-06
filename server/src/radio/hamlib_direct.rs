@@ -64,7 +64,9 @@ impl HamlibDirect {
                 return Err(anyhow!("rig_open failed: {ret}"));
             }
 
-            Ok(HamlibDirect { rig: handle as usize })
+            Ok(HamlibDirect {
+                rig: handle as usize,
+            })
         }
     }
 }

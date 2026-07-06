@@ -47,12 +47,7 @@ extern "C" {
         mode: *mut rmode_t,
         width: *mut pbwidth_t,
     ) -> c_int;
-    pub fn rig_set_mode(
-        rig: RigHandle,
-        vfo: vfo_t,
-        mode: rmode_t,
-        width: pbwidth_t,
-    ) -> c_int;
+    pub fn rig_set_mode(rig: RigHandle, vfo: vfo_t, mode: rmode_t, width: pbwidth_t) -> c_int;
 
     pub fn rig_get_ptt(rig: RigHandle, vfo: vfo_t, ptt: *mut ptt_t) -> c_int;
     pub fn rig_set_ptt(rig: RigHandle, vfo: vfo_t, ptt: ptt_t) -> c_int;

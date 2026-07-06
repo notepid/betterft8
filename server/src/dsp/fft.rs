@@ -1,5 +1,5 @@
-use std::f32::consts::PI;
 use num_complex::Complex;
+use std::f32::consts::PI;
 
 /// Apply a Hann window to a sample buffer in place.
 pub fn apply_hann_window(buf: &mut [f32]) {

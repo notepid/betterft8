@@ -44,11 +44,11 @@ fn main() {
             let zip_file = hamlib_dir.join("hamlib-w64.zip");
             if !lib_file.exists() && zip_file.exists() {
                 println!("cargo:warning=Extracting hamlib-w64.zip...");
-                let file = std::fs::File::open(&zip_file)
-                    .expect("failed to open hamlib-w64.zip");
-                let mut archive = zip::ZipArchive::new(file)
-                    .expect("failed to read hamlib-w64.zip");
-                archive.extract(hamlib_dir)
+                let file = std::fs::File::open(&zip_file).expect("failed to open hamlib-w64.zip");
+                let mut archive =
+                    zip::ZipArchive::new(file).expect("failed to read hamlib-w64.zip");
+                archive
+                    .extract(hamlib_dir)
                     .expect("failed to extract hamlib-w64.zip");
             }
         }

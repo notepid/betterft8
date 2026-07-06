@@ -15,10 +15,10 @@ mod radio;
 mod state;
 mod web;
 
+use radio::RadioCommand;
 use state::{AppState, LogEntryData, QsoUpdate};
 use web::server::build_router;
 use web::session::SessionManager;
-use radio::RadioCommand;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -28,7 +28,9 @@ async fn main() -> Result<()> {
         .init();
 
     // First CLI argument is the config path; fall back to "betterft8.toml".
-    let config_path = std::env::args().nth(1).unwrap_or_else(|| "betterft8.toml".to_string());
+    let config_path = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "betterft8.toml".to_string());
 
     let setup_mode = !config::config_file_exists(&config_path);
     let config = config::load(&config_path)?;
@@ -36,11 +38,11 @@ async fn main() -> Result<()> {
     let addr = format!("{}:{}", config.network.host, config.network.port);
     tracing::info!("BetterFT8 server starting on {addr}");
 
-    let (waterfall_tx, _)  = broadcast::channel(32);
-    let (decode_tx, _)     = broadcast::channel(16);
-    let (radio_tx, _)      = broadcast::channel(8);
-    let (qso_tx, _)        = broadcast::channel::<QsoUpdate>(16);
-    let (log_tx, _)        = broadcast::channel::<LogEntryData>(8);
+    let (waterfall_tx, _) = broadcast::channel(32);
+    let (decode_tx, _) = broadcast::channel(16);
+    let (radio_tx, _) = broadcast::channel(8);
+    let (qso_tx, _) = broadcast::channel::<QsoUpdate>(16);
+    let (log_tx, _) = broadcast::channel::<LogEntryData>(8);
     let (radio_cmd_tx, radio_cmd_rx) = tokio::sync::mpsc::channel::<RadioCommand>(16);
 
     // Shared rolling audio buffer for the FT8 decode engine.
@@ -79,16 +81,14 @@ async fn main() -> Result<()> {
 
     // TLS config (read before moving config into AppState).
     let tls_cert = config.network.tls_cert.clone();
-    let tls_key  = config.network.tls_key.clone();
+    let tls_key = config.network.tls_key.clone();
 
     // Warn loudly if binding a publicly reachable address without TLS: passwords
     // and all traffic would be sent in plaintext over the network.
     let tls_configured = tls_cert.is_some() && tls_key.is_some();
     let host = config.network.host.trim();
-    let is_loopback = host == "localhost"
-        || host == "127.0.0.1"
-        || host == "::1"
-        || host.starts_with("127.");
+    let is_loopback =
+        host == "localhost" || host == "127.0.0.1" || host == "::1" || host.starts_with("127.");
     if !tls_configured && !is_loopback {
         tracing::warn!(
             "Binding non-loopback address {host} WITHOUT TLS — passwords and all \
@@ -101,31 +101,39 @@ async fn main() -> Result<()> {
         config: std::sync::RwLock::new(config),
         sessions,
         waterfall_tx: waterfall_tx.clone(),
-        decode_tx:    decode_tx.clone(),
-        radio_tx:     radio_tx.clone(),
-        qso_tx:       qso_tx.clone(),
-        log_tx:       log_tx.clone(),
-        recent_decodes:    tokio::sync::Mutex::new(VecDeque::new()),
+        decode_tx: decode_tx.clone(),
+        radio_tx: radio_tx.clone(),
+        qso_tx: qso_tx.clone(),
+        log_tx: log_tx.clone(),
+        recent_decodes: tokio::sync::Mutex::new(VecDeque::new()),
         last_radio_status: tokio::sync::Mutex::new(state::RadioStatus::default()),
         radio_cmd_tx,
-        tx_queue:     tokio::sync::Mutex::new(None),
-        tx_enabled:   AtomicBool::new(false),
+        tx_queue: tokio::sync::Mutex::new(None),
+        tx_enabled: AtomicBool::new(false),
         desired_tx_parity: AtomicBool::new(false),
-        qso:          tokio::sync::Mutex::new(engine::qso::QsoState::Idle),
-        qso_start:    Mutex::new(None),
+        qso: tokio::sync::Mutex::new(engine::qso::QsoState::Idle),
+        qso_start: Mutex::new(None),
         playback,
         tx_sample_rate,
         audio_input_devices,
         audio_output_devices,
-        setup_mode:   AtomicBool::new(setup_mode),
-        os_type:      detect_os(),
+        setup_mode: AtomicBool::new(setup_mode),
+        os_type: detect_os(),
     });
 
     // Spawn DSP waterfall task
-    tokio::spawn(dsp::waterfall::run(ring_consumer, effective_rate, waterfall_tx));
+    tokio::spawn(dsp::waterfall::run(
+        ring_consumer,
+        effective_rate,
+        waterfall_tx,
+    ));
 
     // Spawn FT8 decode + TX timing engine
-    tokio::spawn(engine::timing::run(state.clone(), decode_buf, effective_rate));
+    tokio::spawn(engine::timing::run(
+        state.clone(),
+        decode_buf,
+        effective_rate,
+    ));
 
     // Spawn radio polling task
     tokio::spawn(radio::run(state.clone(), radio_cmd_rx));
@@ -147,7 +155,8 @@ async fn main() -> Result<()> {
         axum::serve(
             listener,
             router.into_make_service_with_connect_info::<SocketAddr>(),
-        ).await?;
+        )
+        .await?;
     }
 
     Ok(())
@@ -163,7 +172,11 @@ fn detect_os() -> &'static str {
         let is_rpi = std::fs::read_to_string("/proc/cpuinfo")
             .map(|s| s.contains("Raspberry Pi"))
             .unwrap_or(false);
-        if is_rpi { "raspberry_pi" } else { "linux" }
+        if is_rpi {
+            "raspberry_pi"
+        } else {
+            "linux"
+        }
     } else {
         "unknown"
     }

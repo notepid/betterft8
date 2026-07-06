@@ -10,8 +10,8 @@ use axum::{
 use rust_embed::Embed;
 use tower_http::{cors::CorsLayer, services::ServeDir};
 
-use crate::state::SharedState;
 use super::ws_handler::ws_handler;
+use crate::state::SharedState;
 
 /// Client SPA assets embedded at compile time from `client/dist/`.
 #[derive(Embed)]
@@ -45,9 +45,7 @@ pub fn build_router(state: SharedState) -> Router {
     // so we do not echo arbitrary `Origin`s or enable credentialed cross-site
     // requests. Cross-site WebSocket upgrades are separately blocked by the
     // Origin check in `ws_handler`.
-    router
-        .with_state(state)
-        .layer(CorsLayer::new())
+    router.with_state(state).layer(CorsLayer::new())
 }
 
 /// Serve files from the embedded client assets, with SPA fallback to index.html.
@@ -97,7 +95,10 @@ async fn download_log(
     match tokio::fs::read(&path).await {
         Ok(content) => (
             [
-                (header::CONTENT_DISPOSITION, "attachment; filename=\"ft8.adi\""),
+                (
+                    header::CONTENT_DISPOSITION,
+                    "attachment; filename=\"ft8.adi\"",
+                ),
                 (header::CONTENT_TYPE, "text/plain; charset=utf-8"),
             ],
             content,

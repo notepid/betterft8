@@ -1,3 +1,3 @@
-pub mod timing;
-pub mod qso;
 pub mod logger;
+pub mod qso;
+pub mod timing;

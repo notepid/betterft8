@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
 use super::messages::ServerMessage;
@@ -73,13 +73,16 @@ impl SessionManager {
     pub async fn connect(&self, remote_addr: String, tx: mpsc::Sender<ServerMessage>) -> ClientId {
         let id = Uuid::new_v4();
         let authenticated = self.viewer_password.is_none();
-        self.clients.write().await.insert(id, ClientInfo {
+        self.clients.write().await.insert(
             id,
-            remote_addr,
-            is_operator: false,
-            authenticated,
-            tx,
-        });
+            ClientInfo {
+                id,
+                remote_addr,
+                is_operator: false,
+                authenticated,
+                tx,
+            },
+        );
         id
     }
 
@@ -100,7 +103,10 @@ impl SessionManager {
 
     /// Attempt to claim operator status. Returns true on success.
     pub async fn claim_operator(&self, id: ClientId, password: &str) -> bool {
-        if !constant_time_eq(password.as_bytes(), self.operator_password.read().await.as_bytes()) {
+        if !constant_time_eq(
+            password.as_bytes(),
+            self.operator_password.read().await.as_bytes(),
+        ) {
             return false;
         }
         // Must be authenticated first
@@ -157,7 +163,9 @@ impl SessionManager {
     }
 
     pub async fn is_authenticated(&self, id: ClientId) -> bool {
-        self.clients.read().await
+        self.clients
+            .read()
+            .await
             .get(&id)
             .map(|c| c.authenticated)
             .unwrap_or(false)

@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use tokio::sync::{broadcast, mpsc, Mutex};
@@ -17,23 +17,23 @@ use crate::web::session::SessionManager;
 #[derive(Clone)]
 pub struct WaterfallLine {
     pub timestamp: f64,
-    pub data_b64:  String,
-    pub freq_min:  u32,
-    pub freq_max:  u32,
+    pub data_b64: String,
+    pub freq_min: u32,
+    pub freq_max: u32,
 }
 
 #[derive(Clone)]
 pub struct DecodeResult {
-    pub period:   u64,
+    pub period: u64,
     pub messages: Vec<DecodedMessage>,
 }
 
 #[derive(Clone, Default)]
 pub struct RadioStatus {
     pub connected: bool,
-    pub freq:      u64,
-    pub mode:      String,
-    pub ptt:       bool,
+    pub freq: u64,
+    pub mode: String,
+    pub ptt: bool,
 }
 
 /// A pending FT8 transmission: pre-encoded audio + display text.
@@ -47,10 +47,10 @@ pub struct TxRequest {
 /// QSO state update broadcast to all WebSocket clients.
 #[derive(Clone)]
 pub struct QsoUpdate {
-    pub state:      QsoState,
-    pub next_tx:    Option<String>,
+    pub state: QsoState,
+    pub next_tx: Option<String>,
     pub tx_enabled: bool,
-    pub tx_queued:  bool,
+    pub tx_queued: bool,
 }
 
 /// ADIF log entry broadcast to all authenticated clients.
@@ -58,12 +58,12 @@ pub struct QsoUpdate {
 pub struct LogEntryData {
     pub their_call: String,
     pub their_grid: Option<String>,
-    pub rst_sent:   String,
-    pub rst_rcvd:   String,
-    pub freq_hz:    u64,
-    pub band:       String,
-    pub date:       String,
-    pub time_on:    String,
+    pub rst_sent: String,
+    pub rst_rcvd: String,
+    pub freq_hz: u64,
+    pub band: String,
+    pub date: String,
+    pub time_on: String,
 }
 
 // ---- Shared application state -----------------------------------------------
@@ -77,10 +77,10 @@ pub struct AppState {
 
     // ---- Broadcast channels -------------------------------------------------
     pub waterfall_tx: broadcast::Sender<WaterfallLine>,
-    pub decode_tx:    broadcast::Sender<DecodeResult>,
-    pub radio_tx:     broadcast::Sender<RadioStatus>,
-    pub qso_tx:       broadcast::Sender<QsoUpdate>,
-    pub log_tx:       broadcast::Sender<LogEntryData>,
+    pub decode_tx: broadcast::Sender<DecodeResult>,
+    pub radio_tx: broadcast::Sender<RadioStatus>,
+    pub qso_tx: broadcast::Sender<QsoUpdate>,
+    pub log_tx: broadcast::Sender<LogEntryData>,
 
     // ---- Cached state for initial sync to new clients -----------------------
     /// Last 5 decode periods; newest at front.
@@ -109,7 +109,7 @@ pub struct AppState {
     pub tx_sample_rate: u32,
 
     // ---- Audio device enumeration -------------------------------------------
-    pub audio_input_devices:  Vec<String>,
+    pub audio_input_devices: Vec<String>,
     pub audio_output_devices: Vec<String>,
 
     // ---- Setup wizard -------------------------------------------------------

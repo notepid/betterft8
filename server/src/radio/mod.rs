@@ -1,8 +1,8 @@
 pub mod hamlib;
 #[cfg(feature = "hamlib")]
-mod hamlib_ffi;
-#[cfg(feature = "hamlib")]
 pub mod hamlib_direct;
+#[cfg(feature = "hamlib")]
+mod hamlib_ffi;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -89,14 +89,23 @@ async fn create_backend(state: &AppState) -> Result<Backend> {
     match cfg.backend.as_str() {
         #[cfg(feature = "hamlib")]
         "hamlib" => {
-            let model = cfg.rig_model.ok_or_else(|| anyhow::anyhow!("rig_model required for hamlib backend"))?;
-            let port = cfg.serial_port.clone().ok_or_else(|| anyhow::anyhow!("serial_port required for hamlib backend"))?;
+            let model = cfg
+                .rig_model
+                .ok_or_else(|| anyhow::anyhow!("rig_model required for hamlib backend"))?;
+            let port = cfg
+                .serial_port
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("serial_port required for hamlib backend"))?;
             let baud = cfg.baud_rate.unwrap_or(9600);
             let backend = tokio::task::spawn_blocking(move || {
                 hamlib_direct::HamlibDirect::new(model, &port, baud)
-            }).await??;
-            tracing::info!("Hamlib direct backend connected (model={}, port={})",
-                cfg.rig_model.unwrap(), cfg.serial_port.as_deref().unwrap());
+            })
+            .await??;
+            tracing::info!(
+                "Hamlib direct backend connected (model={}, port={})",
+                cfg.rig_model.unwrap(),
+                cfg.serial_port.as_deref().unwrap()
+            );
             Ok(Backend::Hamlib(backend))
         }
         #[cfg(not(feature = "hamlib"))]
@@ -105,7 +114,11 @@ async fn create_backend(state: &AppState) -> Result<Backend> {
         }
         _ => {
             let rig = hamlib::RigCtld::connect(&cfg.rigctld_host, cfg.rigctld_port).await?;
-            tracing::info!("Connected to rigctld at {}:{}", cfg.rigctld_host, cfg.rigctld_port);
+            tracing::info!(
+                "Connected to rigctld at {}:{}",
+                cfg.rigctld_host,
+                cfg.rigctld_port
+            );
             Ok(Backend::RigCtld(rig))
         }
     }
@@ -157,8 +170,7 @@ pub async fn run(state: Arc<AppState>, mut cmd_rx: mpsc::Receiver<RadioCommand>)
         tracing::info!("PTT forced OFF after connect");
 
         // ---- Poll + command loop --------------------------------------------
-        let mut poll_timer =
-            tokio::time::interval(Duration::from_millis(poll_interval_ms));
+        let mut poll_timer = tokio::time::interval(Duration::from_millis(poll_interval_ms));
         poll_timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         loop {
@@ -210,5 +222,10 @@ async fn poll_once(rig: &mut Backend) -> anyhow::Result<RadioStatus> {
     let freq = rig.get_frequency().await?;
     let (mode, _) = rig.get_mode().await?;
     let ptt = rig.get_ptt().await?;
-    Ok(RadioStatus { connected: true, freq, mode, ptt })
+    Ok(RadioStatus {
+        connected: true,
+        freq,
+        mode,
+        ptt,
+    })
 }

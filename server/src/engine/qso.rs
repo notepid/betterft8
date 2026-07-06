@@ -1,5 +1,5 @@
-use serde::Serialize;
 use crate::dsp::ft8::DecodedMessage;
+use serde::Serialize;
 
 // ---- State types ------------------------------------------------------------
 
@@ -28,18 +28,18 @@ pub enum QsoState {
         tx_freq: f32,
     },
     InQso {
-        their_call:    String,
-        their_grid:    Option<String>,
-        their_report:  Option<i32>,
-        my_report:     Option<i32>,
-        my_grid:       Option<String>, // set when we initiated by responding to their CQ
-        step:          QsoStep,
-        tx_freq:       f32,
+        their_call: String,
+        their_grid: Option<String>,
+        their_report: Option<i32>,
+        my_report: Option<i32>,
+        my_grid: Option<String>, // set when we initiated by responding to their CQ
+        step: QsoStep,
+        tx_freq: f32,
     },
     Complete {
-        their_call:   String,
+        their_call: String,
         their_report: Option<i32>,
-        my_report:    Option<i32>,
+        my_report: Option<i32>,
     },
 }
 
@@ -54,8 +54,8 @@ impl QsoState {
     pub fn tx_freq(&self) -> f32 {
         match self {
             QsoState::CallingCq { tx_freq, .. } => *tx_freq,
-            QsoState::InQso     { tx_freq, .. } => *tx_freq,
-            _                                   => 1000.0,
+            QsoState::InQso { tx_freq, .. } => *tx_freq,
+            _ => 1000.0,
         }
     }
 }
@@ -67,7 +67,12 @@ pub fn cq_message(my_call: &str, my_grid: &str) -> String {
 }
 
 pub fn grid_response(their_call: &str, my_call: &str, my_grid: &str) -> String {
-    format!("{} {} {}", their_call, my_call, &my_grid[..4.min(my_grid.len())])
+    format!(
+        "{} {} {}",
+        their_call,
+        my_call,
+        &my_grid[..4.min(my_grid.len())]
+    )
 }
 
 pub fn report_msg(their_call: &str, my_call: &str, snr: i32) -> String {
@@ -90,7 +95,9 @@ pub fn seventy_three_msg(their_call: &str, my_call: &str) -> String {
 
 /// Strip angle brackets from hashed callsigns (e.g. `<W1AW>` → `W1AW`).
 fn strip_hash(s: &str) -> &str {
-    s.strip_prefix('<').and_then(|s| s.strip_suffix('>')).unwrap_or(s)
+    s.strip_prefix('<')
+        .and_then(|s| s.strip_suffix('>'))
+        .unwrap_or(s)
 }
 
 fn is_grid(s: &str) -> bool {
@@ -132,17 +139,17 @@ fn parse_snr(s: &str) -> Option<i32> {
 ///
 /// Returns `Some(message)` with the next TX text to queue, or `None` to stop TX.
 /// When returning `Some`, the state is updated in-place.
-pub fn advance(
-    state:    &mut QsoState,
-    my_call:  &str,
-    decoded:  &[DecodedMessage],
-) -> Option<String> {
+pub fn advance(state: &mut QsoState, my_call: &str, decoded: &[DecodedMessage]) -> Option<String> {
     match state {
         // -----------------------------------------------------------------
         QsoState::Idle => None,
 
         // -----------------------------------------------------------------
-        QsoState::CallingCq { my_call: mc, my_grid, tx_freq } => {
+        QsoState::CallingCq {
+            my_call: mc,
+            my_grid,
+            tx_freq,
+        } => {
             let mc = mc.clone();
             let my_grid = my_grid.clone();
             let tx_freq = *tx_freq;
@@ -165,15 +172,19 @@ pub fn advance(
                     let their_grid = w[2].to_uppercase();
                     let next_msg = report_msg(&their_call, my_call, snr);
 
-                    tracing::info!("QSO: {} responded (grid {}), sending report", their_call, their_grid);
+                    tracing::info!(
+                        "QSO: {} responded (grid {}), sending report",
+                        their_call,
+                        their_grid
+                    );
 
                     *state = QsoState::InQso {
                         their_call,
-                        their_grid:   Some(their_grid),
+                        their_grid: Some(their_grid),
                         their_report: None,
-                        my_report:    Some(snr),
-                        my_grid:      None,
-                        step:         QsoStep::SentReport,
+                        my_report: Some(snr),
+                        my_grid: None,
+                        step: QsoStep::SentReport,
                         tx_freq,
                     };
                     return Some(next_msg);
@@ -183,15 +194,19 @@ pub fn advance(
                     let their_snr = parse_snr(w[2]).unwrap_or(0);
                     let next_msg = roger_report_msg(&their_call, my_call, snr);
 
-                    tracing::info!("QSO: {} responded with report {}, sending R-report", their_call, their_snr);
+                    tracing::info!(
+                        "QSO: {} responded with report {}, sending R-report",
+                        their_call,
+                        their_snr
+                    );
 
                     *state = QsoState::InQso {
                         their_call,
-                        their_grid:   None,
+                        their_grid: None,
                         their_report: Some(their_snr),
-                        my_report:    Some(snr),
-                        my_grid:      None,
-                        step:         QsoStep::SentRogerReport,
+                        my_report: Some(snr),
+                        my_grid: None,
+                        step: QsoStep::SentRogerReport,
                         tx_freq,
                     };
                     return Some(next_msg);
@@ -203,7 +218,15 @@ pub fn advance(
         }
 
         // -----------------------------------------------------------------
-        QsoState::InQso { their_call, step, tx_freq, their_grid, their_report, my_report, my_grid } => {
+        QsoState::InQso {
+            their_call,
+            step,
+            tx_freq,
+            their_grid,
+            their_report,
+            my_report,
+            my_grid,
+        } => {
             let tc = their_call.clone();
             let tx = *tx_freq;
             let tg = their_grid.clone();
@@ -225,30 +248,34 @@ pub fn advance(
 
                         if is_plain_report(w[2]) {
                             let their_snr = parse_snr(w[2]).unwrap_or(0);
-                            let our_snr   = msg.snr.clamp(-24, 99);
-                            let next_msg  = roger_report_msg(&tc, my_call, our_snr);
+                            let our_snr = msg.snr.clamp(-24, 99);
+                            let next_msg = roger_report_msg(&tc, my_call, our_snr);
 
-                            tracing::info!("QSO: got report {} from {}, sending R-report", their_snr, tc);
+                            tracing::info!(
+                                "QSO: got report {} from {}, sending R-report",
+                                their_snr,
+                                tc
+                            );
 
                             *state = QsoState::InQso {
-                                their_call:   tc,
-                                their_grid:   tg,
+                                their_call: tc,
+                                their_grid: tg,
                                 their_report: Some(their_snr),
-                                my_report:    Some(our_snr),
-                                my_grid:      mg,
-                                step:         QsoStep::SentRogerReport,
-                                tx_freq:      tx,
+                                my_report: Some(our_snr),
+                                my_grid: mg,
+                                step: QsoStep::SentRogerReport,
+                                tx_freq: tx,
                             };
                             return Some(next_msg);
                         } else if w[2].eq_ignore_ascii_case("RR73")
-                               || w[2].eq_ignore_ascii_case("RRR")
-                               || w[2].eq_ignore_ascii_case("73")
+                            || w[2].eq_ignore_ascii_case("RRR")
+                            || w[2].eq_ignore_ascii_case("73")
                         {
                             tracing::info!("QSO: got {} from {} at SentGrid, completing", w[2], tc);
                             *state = QsoState::Complete {
-                                their_call:   tc,
+                                their_call: tc,
                                 their_report: tr,
-                                my_report:    mr,
+                                my_report: mr,
                             };
                             return None;
                         }
@@ -271,47 +298,54 @@ pub fn advance(
                         if is_roger_report(w[2]) {
                             // Standard: they acknowledged with R-report → send RR73
                             let their_snr = parse_snr(w[2]).unwrap_or(0);
-                            let next_msg  = rr73_msg(&tc, my_call);
+                            let next_msg = rr73_msg(&tc, my_call);
 
                             tracing::info!("QSO: got R-report from {}, sending RR73", tc);
 
                             *state = QsoState::InQso {
-                                their_call:   tc,
-                                their_grid:   tg,
+                                their_call: tc,
+                                their_grid: tg,
                                 their_report: Some(their_snr),
-                                my_report:    mr,
-                                my_grid:      mg,
-                                step:         QsoStep::SentRR73,
-                                tx_freq:      tx,
+                                my_report: mr,
+                                my_grid: mg,
+                                step: QsoStep::SentRR73,
+                                tx_freq: tx,
                             };
                             return Some(next_msg);
                         } else if w[2].eq_ignore_ascii_case("RR73")
-                               || w[2].eq_ignore_ascii_case("RRR")
+                            || w[2].eq_ignore_ascii_case("RRR")
                         {
                             // They skipped R-report and went straight to RRR/RR73 →
                             // send 73 to confirm
                             let next_msg = seventy_three_msg(&tc, my_call);
 
-                            tracing::info!("QSO: got {} from {} (skipped R-report), sending 73", w[2], tc);
+                            tracing::info!(
+                                "QSO: got {} from {} (skipped R-report), sending 73",
+                                w[2],
+                                tc
+                            );
 
                             *state = QsoState::InQso {
-                                their_call:   tc,
-                                their_grid:   tg,
+                                their_call: tc,
+                                their_grid: tg,
                                 their_report: tr,
-                                my_report:    mr,
-                                my_grid:      mg,
-                                step:         QsoStep::Sent73,
-                                tx_freq:      tx,
+                                my_report: mr,
+                                my_grid: mg,
+                                step: QsoStep::Sent73,
+                                tx_freq: tx,
                             };
                             return Some(next_msg);
                         } else if w[2].eq_ignore_ascii_case("73") {
                             // They sent 73 directly — QSO is done
-                            tracing::info!("QSO: got 73 from {} (skipped R-report), completing", tc);
+                            tracing::info!(
+                                "QSO: got 73 from {} (skipped R-report), completing",
+                                tc
+                            );
 
                             *state = QsoState::Complete {
-                                their_call:   tc,
+                                their_call: tc,
                                 their_report: tr,
-                                my_report:    mr,
+                                my_report: mr,
                             };
                             return None;
                         }
@@ -335,13 +369,13 @@ pub fn advance(
                             tracing::info!("QSO: got {} from {}, sending 73", w[2], tc);
 
                             *state = QsoState::InQso {
-                                their_call:   tc,
-                                their_grid:   tg,
+                                their_call: tc,
+                                their_grid: tg,
                                 their_report: tr,
-                                my_report:    mr,
-                                my_grid:      mg,
-                                step:         QsoStep::Sent73,
-                                tx_freq:      tx,
+                                my_report: mr,
+                                my_grid: mg,
+                                step: QsoStep::Sent73,
+                                tx_freq: tx,
                             };
                             return Some(next_msg);
                         }
@@ -386,9 +420,9 @@ pub fn advance(
 
                     tracing::info!("QSO with {} complete (after RR73)", tc);
                     *state = QsoState::Complete {
-                        their_call:   tc,
+                        their_call: tc,
                         their_report: tr,
-                        my_report:    mr,
+                        my_report: mr,
                     };
                     None
                 }
@@ -397,9 +431,9 @@ pub fn advance(
                 QsoStep::Sent73 => {
                     tracing::info!("QSO with {} complete (after 73)", tc);
                     *state = QsoState::Complete {
-                        their_call:   tc,
+                        their_call: tc,
                         their_report: tr,
-                        my_report:    mr,
+                        my_report: mr,
                     };
                     None
                 }
@@ -462,10 +496,7 @@ mod tests {
             my_grid: "FN31".into(),
             tx_freq: 1200.0,
         };
-        let decoded = vec![
-            dm("CQ K1ABC FN42", -5),
-            dm("CQ DX N5XYZ EM10", -3),
-        ];
+        let decoded = vec![dm("CQ K1ABC FN42", -5), dm("CQ DX N5XYZ EM10", -3)];
         let out = advance(&mut state, "W1AW", &decoded);
         assert_eq!(out, Some("CQ W1AW FN31".to_string()));
         assert!(matches!(state, QsoState::CallingCq { .. }));
@@ -483,7 +514,12 @@ mod tests {
         let out = advance(&mut state, "W1AW", &[dm("W1AW K1ABC FN42", -8)]);
         assert_eq!(out, Some("K1ABC W1AW -08".to_string()));
         match &state {
-            QsoState::InQso { their_call, step, my_report, .. } => {
+            QsoState::InQso {
+                their_call,
+                step,
+                my_report,
+                ..
+            } => {
                 assert_eq!(their_call, "K1ABC");
                 assert_eq!(*step, QsoStep::SentReport);
                 assert_eq!(*my_report, Some(-8));
@@ -496,7 +532,10 @@ mod tests {
         assert_eq!(out, Some("K1ABC W1AW RR73".to_string()));
         assert!(matches!(
             state,
-            QsoState::InQso { step: QsoStep::SentRR73, .. }
+            QsoState::InQso {
+                step: QsoStep::SentRR73,
+                ..
+            }
         ));
 
         // 3) They send 73 → QSO complete, no further TX.
@@ -525,7 +564,10 @@ mod tests {
         assert_eq!(out, Some("K1ABC W1AW RR73".to_string()));
         assert!(matches!(
             state,
-            QsoState::InQso { step: QsoStep::SentRR73, .. }
+            QsoState::InQso {
+                step: QsoStep::SentRR73,
+                ..
+            }
         ));
 
         // Once the peer sends 73, the QSO completes.

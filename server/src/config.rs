@@ -159,7 +159,10 @@ pub fn load(path: &str) -> Result<Config> {
 /// Persist the current in-memory config back to the file it was loaded from
 /// (falling back to `betterft8.toml` if `load()` was never called).
 pub fn save(config: &Config) -> Result<()> {
-    let path = CONFIG_PATH.get().map(String::as_str).unwrap_or("betterft8.toml");
+    let path = CONFIG_PATH
+        .get()
+        .map(String::as_str)
+        .unwrap_or("betterft8.toml");
     let toml_str = toml::to_string_pretty(config)?;
     std::fs::write(path, toml_str)?;
     Ok(())

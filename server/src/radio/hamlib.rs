@@ -10,11 +10,41 @@ use super::RadioBackend;
 fn is_valid_mode(mode: &str) -> bool {
     matches!(
         mode,
-        "USB" | "LSB" | "CW" | "CWR" | "RTTY" | "RTTYR" | "AM" | "FM" | "WFM"
-            | "AMS" | "PKTUSB" | "PKTLSB" | "PKTFM" | "PKTAM" | "ECSSUSB"
-            | "ECSSLSB" | "FA" | "SAM" | "SAL" | "SAH" | "DSB" | "FMN"
-            | "SPEC" | "CWN" | "FSK" | "FSKR" | "P25" | "DSTAR" | "DPMR"
-            | "NXDNVN" | "NXDNN" | "DCR" | "AMN" | "PSK" | "PSKR"
+        "USB"
+            | "LSB"
+            | "CW"
+            | "CWR"
+            | "RTTY"
+            | "RTTYR"
+            | "AM"
+            | "FM"
+            | "WFM"
+            | "AMS"
+            | "PKTUSB"
+            | "PKTLSB"
+            | "PKTFM"
+            | "PKTAM"
+            | "ECSSUSB"
+            | "ECSSLSB"
+            | "FA"
+            | "SAM"
+            | "SAL"
+            | "SAH"
+            | "DSB"
+            | "FMN"
+            | "SPEC"
+            | "CWN"
+            | "FSK"
+            | "FSKR"
+            | "P25"
+            | "DSTAR"
+            | "DPMR"
+            | "NXDNVN"
+            | "NXDNN"
+            | "DCR"
+            | "AMN"
+            | "PSK"
+            | "PSKR"
     )
 }
 
@@ -66,7 +96,6 @@ impl RigCtld {
             lines.push(trimmed);
         }
     }
-
 }
 
 impl RadioBackend for RigCtld {
@@ -109,7 +138,8 @@ impl RadioBackend for RigCtld {
         if !is_valid_mode(mode) {
             return Err(anyhow!("invalid rig mode: {:?}", mode));
         }
-        self.send_command(&format!("+M {} {}", mode, passband)).await?;
+        self.send_command(&format!("+M {} {}", mode, passband))
+            .await?;
         Ok(())
     }
 
@@ -124,7 +154,8 @@ impl RadioBackend for RigCtld {
     }
 
     async fn set_ptt(&mut self, on: bool) -> Result<()> {
-        self.send_command(&format!("+T {}", if on { 1 } else { 0 })).await?;
+        self.send_command(&format!("+T {}", if on { 1 } else { 0 }))
+            .await?;
         Ok(())
     }
 }
