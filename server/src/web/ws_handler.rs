@@ -897,8 +897,7 @@ async fn handle_complete_setup(
 
 fn valid_callsign(call: &str) -> bool {
     let len = call.len();
-    len >= 3
-        && len <= 13
+    (3..=13).contains(&len)
         && call
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '/' || c == '-')

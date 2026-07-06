@@ -77,6 +77,9 @@ impl Backend {
 }
 
 /// Commands sent to the radio task from the timing engine and WebSocket handler.
+// The shared `Set` prefix is intentional: it reads clearly at call sites and
+// mirrors the underlying rig-control operations.
+#[allow(clippy::enum_variant_names)]
 pub enum RadioCommand {
     SetPtt(bool),
     SetFrequency(u64),

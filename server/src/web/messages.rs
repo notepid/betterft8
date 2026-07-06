@@ -129,6 +129,9 @@ pub enum ClientMessage {
     /// Respond to a decoded CQ from `their_call` at `their_freq`.
     RespondTo {
         their_call: String,
+        // Part of the accepted client message schema (wire protocol); deserialized
+        // but not currently read by the server. Keep the field so the JSON is valid.
+        #[allow(dead_code)]
         their_freq: f32,
         tx_freq: f32,
     },

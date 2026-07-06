@@ -18,9 +18,10 @@ pub enum QsoStep {
     Sent73,
 }
 
-#[derive(Clone, Serialize, Debug)]
+#[derive(Clone, Serialize, Debug, Default)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum QsoState {
+    #[default]
     Idle,
     CallingCq {
         my_call: String,
@@ -41,12 +42,6 @@ pub enum QsoState {
         their_report: Option<i32>,
         my_report: Option<i32>,
     },
-}
-
-impl Default for QsoState {
-    fn default() -> Self {
-        QsoState::Idle
-    }
 }
 
 impl QsoState {
@@ -129,7 +124,7 @@ fn is_roger_report(s: &str) -> bool {
 
 fn parse_snr(s: &str) -> Option<i32> {
     // Accept "+05", "-12", "R+05", "R-12"
-    let s = if s.starts_with('R') { &s[1..] } else { s };
+    let s = s.strip_prefix('R').unwrap_or(s);
     s.parse::<i32>().ok()
 }
 

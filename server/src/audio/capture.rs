@@ -202,6 +202,9 @@ pub fn start_capture(
     Ok((cons, effective_rate, stream))
 }
 
+// Low-level audio-decimation helper: bundling these mutable running-state args
+// into a struct would add churn without clarifying this hot per-callback path.
+#[allow(clippy::too_many_arguments)]
 fn write_samples(
     data: &[f32],
     channels: usize,

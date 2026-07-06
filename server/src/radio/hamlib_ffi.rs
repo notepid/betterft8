@@ -1,6 +1,10 @@
 //! Raw FFI declarations for the Hamlib C library.
 //! Only the functions needed for basic rig control are declared here.
 
+// These type aliases deliberately mirror Hamlib's C type names (freq_t, vfo_t,
+// etc.) so the mapping to the C API stays obvious; keep their snake_case names.
+#![allow(non_camel_case_types)]
+
 use std::os::raw::{c_char, c_double, c_int};
 
 /// Opaque rig handle (`Rig *` in C).

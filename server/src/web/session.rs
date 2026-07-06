@@ -25,7 +25,11 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 }
 
 pub struct ClientInfo {
+    // Retained for logging/debugging of connected clients; not currently read
+    // elsewhere in the code, but kept as useful per-client identity metadata.
+    #[allow(dead_code)]
     pub id: ClientId,
+    #[allow(dead_code)]
     pub remote_addr: String,
     pub is_operator: bool,
     pub authenticated: bool,
@@ -160,15 +164,6 @@ impl SessionManager {
 
     pub async fn is_operator(&self, id: ClientId) -> bool {
         *self.operator.read().await == Some(id)
-    }
-
-    pub async fn is_authenticated(&self, id: ClientId) -> bool {
-        self.clients
-            .read()
-            .await
-            .get(&id)
-            .map(|c| c.authenticated)
-            .unwrap_or(false)
     }
 
     pub async fn current_operator(&self) -> Option<ClientId> {

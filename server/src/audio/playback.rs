@@ -4,18 +4,10 @@ use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
 
+#[derive(Default)]
 struct PlaybackBuf {
     samples: Vec<f32>,
     pos: usize,
-}
-
-impl Default for PlaybackBuf {
-    fn default() -> Self {
-        PlaybackBuf {
-            samples: Vec::new(),
-            pos: 0,
-        }
-    }
 }
 
 /// Send+Sync handle to the playback buffer.  Store this in `AppState`.
@@ -43,12 +35,6 @@ impl PlaybackHandle {
         let mut g = self.buf.lock().unwrap();
         g.samples.clear();
         g.pos = 0;
-    }
-
-    /// Returns true if there are still samples remaining in the buffer.
-    pub fn is_playing(&self) -> bool {
-        let g = self.buf.lock().unwrap();
-        g.pos < g.samples.len()
     }
 }
 

@@ -166,12 +166,14 @@ pub async fn run(state: SharedState, audio_buf: AudioBuf, sample_rate: u32) {
             };
 
             // Log QSO if it just completed.
-            if pre_qso_info.is_some() && next_msg.is_none() {
-                let new_state = state.qso.lock().await;
-                if matches!(&*new_state, QsoState::Complete { .. }) {
-                    let (their_call, their_grid, their_report, my_report) = pre_qso_info.unwrap();
-                    drop(new_state); // release lock before I/O
-                    maybe_log_qso(&state, their_call, their_grid, their_report, my_report).await;
+            if let Some((their_call, their_grid, their_report, my_report)) = pre_qso_info {
+                if next_msg.is_none() {
+                    let new_state = state.qso.lock().await;
+                    if matches!(&*new_state, QsoState::Complete { .. }) {
+                        drop(new_state); // release lock before I/O
+                        maybe_log_qso(&state, their_call, their_grid, their_report, my_report)
+                            .await;
+                    }
                 }
             }
 
