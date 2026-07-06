@@ -98,8 +98,9 @@ export const settingsOpen = writable<boolean>(false)
 /** Alert sound enabled (when callsign is heard). */
 export const alertEnabled = writable<boolean>(true)
 
-/** Waterfall color scheme. */
-export const waterfallScheme = writable<'classic' | 'greyscale' | 'heat'>('classic')
+/** Waterfall color scheme. Defaults to the warm "heat" map to harmonise with the
+ * amber chrome; users can switch to classic/greyscale in the waterfall controls. */
+export const waterfallScheme = writable<'classic' | 'greyscale' | 'heat'>('heat')
 
 /** Waterfall display floor in dB (-120 to 0). Values below this → black. */
 export const waterfallFloor = writable<number>(-120)

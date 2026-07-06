@@ -9,50 +9,54 @@
  */
 
 :root {
+  /* "Graphite & Amber" — warm charcoal surfaces with an analog-dial amber
+   * accent; a deliberately hand-picked, equipment-like palette (not the default
+   * indigo/neon-cyan look). Text contrast checked against --bg-base/--surface-1. */
+
   /* ---- Surface / background layers (darkest -> lightest) ---- */
-  --bg-base: #13131f;      /* app canvas */
-  --bg-sunken: #0d0d18;    /* inputs, decode list, waterfall well */
-  --surface-1: #1a1a2e;    /* primary panels */
-  --surface-2: #212140;    /* raised panels / sticky headers */
-  --surface-3: #2a2a4a;    /* hover fills, inert buttons */
+  --bg-base: #141310;      /* app canvas */
+  --bg-sunken: #0e0d0a;    /* inputs, decode list, waterfall well */
+  --surface-1: #1d1b16;    /* primary panels */
+  --surface-2: #262318;    /* raised panels / sticky headers */
+  --surface-3: #322e22;    /* hover fills, inert buttons */
 
   /* ---- Borders / hairlines ---- */
-  --border: #2c2c4e;
-  --border-strong: #3a3a6a;
+  --border: #363024;
+  --border-strong: #4c4432;
 
-  /* ---- Text (contrast checked against --bg-base / --surface-1) ---- */
-  --text-primary: #e8e8f2;
-  --text-secondary: #b7b7d0;
-  --text-muted: #8b8bae;      /* AA floor for small text */
-  --text-disabled: #5c5c78;   /* non-text / off states only */
+  /* ---- Text ---- */
+  --text-primary: #ece5d5;
+  --text-secondary: #c2b8a4;
+  --text-muted: #948a75;      /* AA floor for small text */
+  --text-disabled: #615a49;   /* non-text / off states only */
 
-  /* ---- Accent / brand ---- */
-  --accent: #7ec8e3;
-  --accent-hover: #a6dcf0;
-  --accent-ink: #0d0d1a;      /* text on a filled accent surface */
+  /* ---- Accent / brand (amber) ---- */
+  --accent: #e0a54a;
+  --accent-hover: #f2bd66;
+  --accent-ink: #1a1710;      /* text on a filled accent surface */
 
   /* ---- Semantic ---- */
-  --success: #2ecc71;
-  --success-bg: #12331f;
-  --success-border: #216b3a;
-  --success-text: #7fe0a6;
-  --warn: #e0a63b;
-  --warn-bg: #33280d;
-  --warn-border: #6b531e;
-  --warn-text: #f0c66b;
-  --danger: #e05252;
-  --danger-bg: #3a1414;
-  --danger-border: #7a2a2a;
-  --danger-text: #f08a8a;
+  --success: #7fb069;
+  --success-bg: #18220f;
+  --success-border: #3a5230;
+  --success-text: #a8cf94;
+  --warn: #d99a34;
+  --warn-bg: #2a2210;
+  --warn-border: #5a4a1e;
+  --warn-text: #f0c877;
+  --danger: #cf5b4a;
+  --danger-bg: #2b1411;
+  --danger-border: #5c2a22;
+  --danger-text: #e89386;
   --info: var(--accent);
 
   /* ---- Domain-specific ---- */
-  --tx-active: #ff3ad2;                     /* the single "on the air" colour */
-  --tx-active-bg: rgba(255, 58, 210, 0.16);
+  --tx-active: #ff7043;                     /* the single "on the air" colour */
+  --tx-active-bg: rgba(255, 112, 67, 0.16);
   --role-operator: var(--success);
-  --role-viewer: #7a86c4;
-  --cq: #37e39b;                            /* CQ rows + waterfall overlay */
-  --mycall: #f5d54a;                        /* my-call highlight */
+  --role-viewer: #a99b7d;
+  --cq: #8fbf5f;                            /* CQ rows + waterfall overlay */
+  --mycall: #f2c14e;                        /* my-call highlight */
   --waterfall-bg: #000010;                  /* data surface; never themed */
 
   /* ---- Radius / elevation ---- */

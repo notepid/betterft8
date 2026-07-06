@@ -10,11 +10,17 @@
   let imageData: ImageData | null = null
   let currentFreqMax = 5000
 
-  // Canvas draw colours, kept in sync with the app.css domain palette.
-  // These are JS string colours (not CSS), so they mirror the token values.
-  const CQ_COLOR = '#37e39b' // matches --cq
-  const TX_BAND_COLOR = '#ff3ad2' // matches --tx-active
-  // The canvas background well uses --waterfall-bg (#000010) via CSS on .waterfall-wrap.
+  // Canvas draw colours. The canvas can't use CSS variables directly, so we read
+  // the domain tokens from app.css at mount and mirror them here — this keeps the
+  // overlay/TX-band colours in sync with whatever palette is active (no drift).
+  let CQ_COLOR = '#8fbf5f' // fallback = --cq
+  let TX_BAND_COLOR = '#ff7043' // fallback = --tx-active
+  function syncCanvasColours() {
+    const cs = getComputedStyle(document.documentElement)
+    CQ_COLOR = cs.getPropertyValue('--cq').trim() || CQ_COLOR
+    TX_BAND_COLOR = cs.getPropertyValue('--tx-active').trim() || TX_BAND_COLOR
+  }
+  // The canvas background well uses --waterfall-bg via CSS on .waterfall-wrap.
 
   // Apply an alpha to one of the hex domain colours for canvas fills/strokes.
   function withAlpha(hex: string, alpha: number): string {
@@ -362,6 +368,7 @@
   }
 
   onMount(() => {
+    syncCanvasColours()
     // Resize the backing store to match the box, PRESERVING the spectrogram.
     // History is kept as the working `imageData` buffer; on a resize we allocate
     // a new buffer at the new dimensions and copy the retained pixels in,
