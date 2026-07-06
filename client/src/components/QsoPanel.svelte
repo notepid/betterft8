@@ -1,6 +1,7 @@
 <script lang="ts">
   import { qsoUpdate, selectedDecode, myRole, txFreq } from '../lib/stores'
   import { client } from '../lib/websocket'
+  import { callerCall } from '../lib/callsign'
   import type { QsoStateValue } from '../lib/messages'
 
   $: update = $qsoUpdate
@@ -8,13 +9,13 @@
   $: nextTx = update?.next_tx ?? null
   $: txEnabled = update?.tx_enabled ?? false
 
-  // Editable next-TX message (user can modify before it fires)
+  // Editable next-TX message (user can modify before it fires).
+  // Keep it in sync with the server's next_tx unless the operator is actively
+  // editing the field, so a server-advanced message never leaves stale text.
   let editedNextTx: string | null = null
-  $: if (nextTx !== null && editedNextTx === null) {
+  let editingNextTx = false
+  $: if (!editingNextTx) {
     editedNextTx = nextTx
-  }
-  $: if (nextTx === null) {
-    editedNextTx = null
   }
 
   function stateLabel(s: QsoStateValue): string {
@@ -61,8 +62,7 @@
 
   function respond() {
     if (!selected) return
-    const words = selected.message.split(' ')
-    const theirCall = words[1] ?? ''
+    const theirCall = callerCall(selected.message)
     client.send({
       type:       'respond_to',
       their_call: theirCall,
@@ -73,8 +73,12 @@
   }
 
   function queueEdited() {
-    if (editedNextTx) {
-      client.send({ type: 'queue_tx', message: editedNextTx, freq: $txFreq })
+    editingNextTx = false
+    const msg = editedNextTx?.trim()
+    // Only queue if the operator actually changed the message; blurring the
+    // field without edits must not re-send a message the server has superseded.
+    if (msg && msg !== nextTx) {
+      client.send({ type: 'queue_tx', message: msg, freq: $txFreq })
     }
   }
 </script>
@@ -161,8 +165,9 @@
       <input
         class="next-tx-input"
         bind:value={editedNextTx}
+        onfocus={() => { editingNextTx = true }}
         onblur={queueEdited}
-        onkeydown={(e) => { if (e.key === 'Enter') queueEdited() }}
+        onkeydown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur() }}
         disabled={!isOperator}
         title={isOperator ? 'Edit message before it fires (press Enter to confirm)' : 'Claim operator to edit'}
       />
@@ -173,7 +178,7 @@
   {#if canRespond && selected}
     <div class="respond-row">
       <span class="respond-info">
-        Respond to <strong>{selected.message.split(' ')[1] ?? ''}</strong>
+        Respond to <strong>{callerCall(selected.message)}</strong>
         @ {Math.round(selected.freq)} Hz?
       </span>
       <button class="btn-respond" onclick={respond}>Respond</button>

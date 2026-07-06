@@ -3,6 +3,7 @@
   import { get } from 'svelte/store'
   import { decodes, selectedDecode, waterfallLine, waterfallScheme, waterfallFloor, waterfallCeiling, waterfallAutoLevel, txFreq } from '../lib/stores'
   import type { Decode } from '../lib/stores'
+  import { callerCall } from '../lib/callsign'
   import type { WaterfallMessage } from '../lib/messages'
 
   let canvas: HTMLCanvasElement
@@ -236,7 +237,7 @@
 
       // Callsign label
       const parts = d.message.split(' ')
-      const label = isCq ? (parts[1] ?? d.message) : (parts[1] ?? parts[0] ?? d.message)
+      const label = isCq ? callerCall(d.message) : (parts[1] ?? parts[0] ?? d.message)
       ctx.fillStyle = color
       ctx.fillText(label, x + 2, 32)
     }
