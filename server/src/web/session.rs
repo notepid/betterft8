@@ -7,6 +7,20 @@ use super::messages::ServerMessage;
 
 pub type ClientId = Uuid;
 
+/// Constant-time byte comparison to avoid leaking password length/content via
+/// timing side-channels. Returns true only if both slices are byte-for-byte
+/// equal. (The `subtle` crate is not a dependency, so this is implemented inline.)
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
 pub struct ClientInfo {
     pub id: ClientId,
     pub remote_addr: String,
@@ -40,6 +54,18 @@ impl SessionManager {
         self.viewer_password.is_some()
     }
 
+    /// Verify a viewer credential (used by non-WS routes such as `/api/log`).
+    /// Returns true if viewing is open (no viewer password) or the supplied
+    /// candidate matches the configured viewer password (constant-time).
+    pub fn check_viewer_credential(&self, candidate: Option<&str>) -> bool {
+        match &self.viewer_password {
+            None => true,
+            Some(vp) => candidate
+                .map(|c| constant_time_eq(c.as_bytes(), vp.as_bytes()))
+                .unwrap_or(false),
+        }
+    }
+
     /// Register a new connection. Auto-authenticates if no viewer password is set.
     pub async fn connect(&self, remote_addr: String, tx: mpsc::Sender<ServerMessage>) -> ClientId {
         let id = Uuid::new_v4();
@@ -57,7 +83,7 @@ impl SessionManager {
     /// Authenticate a viewer. Returns true on success.
     pub async fn authenticate(&self, id: ClientId, password: &str) -> bool {
         if let Some(vp) = &self.viewer_password {
-            if password != vp {
+            if !constant_time_eq(password.as_bytes(), vp.as_bytes()) {
                 return false;
             }
         }
@@ -71,7 +97,7 @@ impl SessionManager {
 
     /// Attempt to claim operator status. Returns true on success.
     pub async fn claim_operator(&self, id: ClientId, password: &str) -> bool {
-        if password != *self.operator_password.read().await {
+        if !constant_time_eq(password.as_bytes(), self.operator_password.read().await.as_bytes()) {
             return false;
         }
         // Must be authenticated first

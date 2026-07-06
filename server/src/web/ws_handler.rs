@@ -3,7 +3,8 @@ use std::sync::atomic::Ordering;
 
 use axum::{
     extract::{ConnectInfo, State, WebSocketUpgrade},
-    response::Response,
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
 };
 use axum::extract::ws::{Message, WebSocket};
 use chrono::Utc;
@@ -20,8 +21,53 @@ pub async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<SharedState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Response {
+    // Guard against cross-site WebSocket hijacking: browsers send an `Origin`
+    // header on WS upgrades, so reject any upgrade whose Origin is not
+    // same-origin (matches the request `Host`) or a localhost address. Requests
+    // with no Origin header are non-browser clients and are allowed.
+    if !origin_allowed(&headers) {
+        tracing::warn!(
+            "Rejected WebSocket upgrade with disallowed Origin: {:?}",
+            headers.get(axum::http::header::ORIGIN)
+        );
+        return StatusCode::FORBIDDEN.into_response();
+    }
     ws.on_upgrade(move |socket| handle_socket(socket, state, addr.to_string()))
+}
+
+/// Returns true if the WS upgrade Origin is acceptable (same-origin, localhost,
+/// or absent). Guards against cross-site WebSocket hijacking.
+fn origin_allowed(headers: &HeaderMap) -> bool {
+    use axum::http::header::{HOST, ORIGIN};
+
+    let origin = match headers.get(ORIGIN).and_then(|v| v.to_str().ok()) {
+        // No Origin header => non-browser client (e.g. native tooling). Allow.
+        None => return true,
+        Some(o) => o,
+    };
+
+    // Extract the host[:port] portion of the Origin URL (strip scheme).
+    let origin_host = origin
+        .split_once("://")
+        .map(|(_, rest)| rest)
+        .unwrap_or(origin);
+
+    // Allow any loopback origin.
+    let host_only = origin_host.split(':').next().unwrap_or(origin_host);
+    if host_only == "localhost" || host_only == "127.0.0.1" || host_only == "::1" {
+        return true;
+    }
+
+    // Allow same-origin: the Origin host must match the request Host header.
+    if let Some(host) = headers.get(HOST).and_then(|v| v.to_str().ok()) {
+        if origin_host.eq_ignore_ascii_case(host) {
+            return true;
+        }
+    }
+
+    false
 }
 
 async fn handle_socket(socket: WebSocket, state: SharedState, remote_addr: String) {
@@ -39,21 +85,11 @@ async fn handle_socket(socket: WebSocket, state: SharedState, remote_addr: Strin
     // Local auth flag — avoids per-message session lookups for the hot broadcast path
     let mut authenticated = !state.sessions.needs_viewer_auth();
 
-    // Send Hello so the client knows whether to show the viewer password form
-    let hello = {
-        let cfg = state.config.read().unwrap();
-        ServerMessage::Hello {
-            needs_viewer_auth: state.sessions.needs_viewer_auth(),
-            callsign: cfg.station.callsign.clone(),
-            grid:     cfg.station.grid.clone(),
-            log_file: cfg.station.log_file.clone(),
-            rig_host: cfg.radio.rigctld_host.clone(),
-            rig_port: cfg.radio.rigctld_port,
-            needs_setup:      state.setup_mode.load(Ordering::Relaxed),
-            os_type:          state.os_type.to_string(),
-            hamlib_available: cfg!(feature = "hamlib"),
-        }
-    };
+    // Send Hello so the client knows whether to show the viewer password form.
+    // When viewer auth is required and not yet satisfied, withhold station and
+    // rig details — they must not be disclosed to unauthenticated clients. A
+    // fresh Hello with the full values is re-sent after successful auth.
+    let hello = build_hello(&state, authenticated);
     if send_msg(&mut sender, &hello).await.is_err() {
         state.sessions.disconnect(client_id).await;
         return;
@@ -86,6 +122,10 @@ async fn handle_socket(socket: WebSocket, state: SharedState, remote_addr: Strin
                         ).await.unwrap_or(false);
                         if became_authed {
                             authenticated = true;
+                            // Re-send Hello with the now-authorised station/rig
+                            // details that were withheld before authentication.
+                            let hello = build_hello(&state, true);
+                            let _ = send_msg(&mut sender, &hello).await;
                             send_initial_state(&state, &mut sender, client_id).await;
                             state.sessions.broadcast_operator_status().await;
                         }
@@ -184,6 +224,24 @@ async fn handle_socket(socket: WebSocket, state: SharedState, remote_addr: Strin
     state.sessions.disconnect(client_id).await;
     state.sessions.broadcast_operator_status().await;
     tracing::info!(client_id = %client_id, "WebSocket disconnected");
+}
+
+/// Build the `Hello` message. Station and rig details are only included when
+/// `authenticated` is true; otherwise they are withheld to avoid disclosing
+/// them to clients that have not yet passed viewer auth.
+fn build_hello(state: &SharedState, authenticated: bool) -> ServerMessage {
+    let cfg = state.config.read().unwrap();
+    ServerMessage::Hello {
+        needs_viewer_auth: state.sessions.needs_viewer_auth(),
+        callsign: if authenticated { cfg.station.callsign.clone() } else { String::new() },
+        grid:     if authenticated { cfg.station.grid.clone() }     else { String::new() },
+        log_file: if authenticated { cfg.station.log_file.clone() } else { String::new() },
+        rig_host: if authenticated { cfg.radio.rigctld_host.clone() } else { String::new() },
+        rig_port: if authenticated { cfg.radio.rigctld_port } else { 0 },
+        needs_setup:      state.setup_mode.load(Ordering::Relaxed),
+        os_type:          state.os_type.to_string(),
+        hamlib_available: cfg!(feature = "hamlib"),
+    }
 }
 
 fn log_entry_msg(entry: LogEntryData) -> ServerMessage {
@@ -638,6 +696,19 @@ async fn handle_complete_setup(
     serial_port:      Option<String>,
     baud_rate:        Option<u32>,
 ) -> ServerMessage {
+    // Only permit the setup wizard during genuine first-run setup mode. Without
+    // this gate any auto-authenticated viewer could overwrite the operator
+    // password and seize operator control. Once setup has completed the server
+    // leaves setup mode and this path is rejected.
+    if !state.setup_mode.load(Ordering::Relaxed) {
+        tracing::warn!("Rejected CompleteSetup: server is not in setup mode");
+        return ServerMessage::ConfigUpdateResult {
+            success: false,
+            message: Some("Setup has already been completed".into()),
+            requires_restart: false,
+        };
+    }
+
     let callsign = callsign.to_uppercase();
     let grid     = grid.to_uppercase();
 

@@ -27,8 +27,11 @@ async fn main() -> Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let setup_mode = !config::config_file_exists();
-    let config = config::load()?;
+    // First CLI argument is the config path; fall back to "betterft8.toml".
+    let config_path = std::env::args().nth(1).unwrap_or_else(|| "betterft8.toml".to_string());
+
+    let setup_mode = !config::config_file_exists(&config_path);
+    let config = config::load(&config_path)?;
 
     let addr = format!("{}:{}", config.network.host, config.network.port);
     tracing::info!("BetterFT8 server starting on {addr}");
@@ -77,6 +80,22 @@ async fn main() -> Result<()> {
     // TLS config (read before moving config into AppState).
     let tls_cert = config.network.tls_cert.clone();
     let tls_key  = config.network.tls_key.clone();
+
+    // Warn loudly if binding a publicly reachable address without TLS: passwords
+    // and all traffic would be sent in plaintext over the network.
+    let tls_configured = tls_cert.is_some() && tls_key.is_some();
+    let host = config.network.host.trim();
+    let is_loopback = host == "localhost"
+        || host == "127.0.0.1"
+        || host == "::1"
+        || host.starts_with("127.");
+    if !tls_configured && !is_loopback {
+        tracing::warn!(
+            "Binding non-loopback address {host} WITHOUT TLS — passwords and all \
+             traffic will be sent in PLAINTEXT. Set network.tls_cert and \
+             network.tls_key, or bind to localhost."
+        );
+    }
 
     let state = Arc::new(AppState {
         config: std::sync::RwLock::new(config),
